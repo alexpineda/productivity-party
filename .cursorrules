@@ -1,0 +1,806 @@
+This is a screenpipe plugin. It is a embedded NextJS app within a node environment.
+
+The screenpipe sdk and api documentation can be found in: `screenpipe_docs.md`
+
+# Components
+
+Components should always be "use client". Access screenpipe features using `@screenpipe/browser`.
+
+# API Endpoints
+
+API endpoints can use node libraries.
+
+Access screenpipe features using `@screenpipe/js`.
+
+# AI
+
+When using AI, use the screenpipe style of calling. Default to `gpt-4o`.
+
+```ts
+import { pipe } from "@screenpipe/js";
+import { OpenAI } from "openai";
+import type { Settings } from "@screenpipe/js";
+
+async function streamMeetingInsights(settings: Settings) {
+  const openai = new OpenAI({
+    apiKey:
+      // user has bought cloud credits from screenpipe.com
+      settings?.aiProviderType === "screenpipe-cloud"
+        ? settings?.user?.token
+        : // user has provided their own api key
+          settings?.openaiApiKey,
+    baseURL: settings?.aiUrl,
+    dangerouslyAllowBrowser: true, // for browser environments
+  });
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o", // if user is using screenpipe-cloud, you can also use claude-3-7-sonnet or gemini-2.0-flash-lite
+    messages: [
+      {
+        role: "system",
+        content: "You are a helpful assistant.",
+      },
+      {
+        role: "user",
+        content: "How are you?",
+      },
+    ],
+  });
+
+  const text = response.choices[0].message.content;
+}
+```
+
+# Screenpipe Database Schema
+
+This schema is the screenpipe database and should be used as readonly via `/raw_sql` endpoint.
+It provides the capture data.
+
+```
+# Database Schema
+
+## Main Tables
+
+### video_chunks
+
+Stores information about video recording chunks
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| file_path | TEXT | NOT NULL |
+| device_name | TEXT | NOT NULL, DEFAULT '' |
+
+### frames
+
+Stores individual frames from video recordings
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| video_chunk_id | INTEGER | NOT NULL, REFERENCES video_chunks(id) |
+| offset_index | INTEGER | NOT NULL |
+| timestamp | TIMESTAMP | NOT NULL |
+| name | TEXT |  |
+| browser_url | TEXT | DEFAULT NULL |
+| app_name | TEXT | DEFAULT NULL |
+| window_name | TEXT | DEFAULT NULL |
+| focused | BOOLEAN | DEFAULT NULL |
+
+### audio_chunks
+
+Stores information about audio recording chunks
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| file_path | TEXT | NOT NULL |
+| timestamp | TIMESTAMP |  |
+
+### chunked_text_index
+
+Stores unique text chunks for efficient indexing
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| text_id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| text | TEXT | NOT NULL, UNIQUE |
+
+### chunked_text_entries
+
+Maps text chunks to frames or audio chunks
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| text_id | INTEGER | NOT NULL, REFERENCES chunked_text_index(text_id) |
+| frame_id | INTEGER | REFERENCES frames(id) |
+| audio_chunk_id | INTEGER | REFERENCES audio_chunks(id) |
+| timestamp | DATETIME | NOT NULL |
+| engine | TEXT | NOT NULL |
+| chunking_engine | TEXT | NOT NULL |
+| source | TEXT | NOT NULL |
+
+### ocr_text
+
+Stores OCR-extracted text from frames
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| frame_id | INTEGER | NOT NULL |
+| text | TEXT | NOT NULL |
+| text_json | TEXT |  |
+| app_name | TEXT | NOT NULL, DEFAULT '' |
+| ocr_engine | TEXT | NOT NULL, DEFAULT 'unknown' |
+| window_name | TEXT |  |
+| focused | BOOLEAN | DEFAULT FALSE |
+| text_length | INTEGER |  |
+
+### tags
+
+Stores tags for categorizing content
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| name | TEXT | NOT NULL, UNIQUE |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP |
+
+### vision_tags
+
+Maps tags to frames (vision data)
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| vision_id | INTEGER | NOT NULL, REFERENCES frames(id) |
+| tag_id | INTEGER | NOT NULL, REFERENCES tags(id) |
+
+**Composite Primary Key**: (vision_id, tag_id)
+
+### audio_tags
+
+Maps tags to audio chunks
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| audio_chunk_id | INTEGER | NOT NULL, REFERENCES audio_chunks(id) |
+| tag_id | INTEGER | NOT NULL, REFERENCES tags(id) |
+
+**Composite Primary Key**: (audio_chunk_id, tag_id)
+
+### ui_monitoring
+
+Stores UI monitoring data
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| text_output | TEXT | NOT NULL |
+| timestamp | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP |
+| app | TEXT | NOT NULL |
+| window | TEXT | NOT NULL |
+| initial_traversal_at | DATETIME |  |
+| text_length | INTEGER |  |
+
+### ui_monitoring_tags
+
+Maps tags to UI monitoring entries
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| ui_monitoring_id | INTEGER | NOT NULL, REFERENCES ui_monitoring(id) |
+| tag_id | INTEGER | NOT NULL, REFERENCES tags(id) |
+
+**Composite Primary Key**: (ui_monitoring_id, tag_id)
+
+### speakers
+
+Stores information about speakers in audio
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| name | TEXT |  |
+| metadata | JSON |  |
+| hallucination | BOOLEAN | DEFAULT FALSE |
+
+### speaker_embeddings
+
+Stores speaker voice embeddings for identification
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| embedding | FLOAT[512] | NOT NULL, CHECK(typeof(embedding) == 'blob' and vec_length(embedding) == 512) |
+| speaker_id | INTEGER | REFERENCES speakers(id) |
+
+### audio_transcriptions
+
+Stores transcriptions of audio chunks
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| audio_chunk_id | INTEGER | NOT NULL, REFERENCES audio_chunks(id) |
+| offset_index | INTEGER | NOT NULL |
+| timestamp | TIMESTAMP | NOT NULL |
+| transcription | TEXT | NOT NULL |
+| device | TEXT | NOT NULL, DEFAULT '' |
+| is_input_device | BOOLEAN | NOT NULL, DEFAULT TRUE |
+| speaker_id | INTEGER |  |
+| transcription_engine | TEXT | NOT NULL, DEFAULT 'Whisper' |
+| start_time | REAL |  |
+| end_time | REAL |  |
+| text_length | INTEGER |  |
+
+### ocr_text_embeddings
+
+Stores embeddings for OCR text
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| frame_id | INTEGER | NOT NULL, REFERENCES frames(id) |
+| embedding | BLOB | NOT NULL |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP |
+
+### friend_wearable_requests
+
+Stores requests for friend wearable data
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| request_id | TEXT | NOT NULL |
+| memory_source | TEXT | NOT NULL |
+| chunk_id_range | TEXT | NOT NULL |
+| timestamp_range | TEXT | NOT NULL |
+| friend_user_id | TEXT | NOT NULL |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP |
+| filtered_text | TEXT |  |
+| structured_response | TEXT |  |
+| response_id | TEXT |  |
+| response_created_at | DATETIME |  |
+| is_successful | BOOLEAN | NOT NULL, DEFAULT TRUE |
+
+## Full-Text Search Tables
+
+### chunked_text_index_fts
+
+Full-text search table for searching: text
+
+### ocr_text_fts
+
+Full-text search table for searching: text, app_name, window_name
+
+### ui_monitoring_fts
+
+Full-text search table for searching: text_output, app, window
+
+### audio_transcriptions_fts
+
+Full-text search table for searching: transcription, device, speaker_id
+
+### frames_fts
+
+Full-text search table for searching: name, browser_url, app_name, window_name, focused
+
+
+```
+
+# Our Plugin Database
+
+Our database is a separate sqlite store. It's for any custom data we need to store specific to our plugin functionality.
+
+# User Settings
+
+If we want to read user defined settings, or create a page to allow users to change specific settings, we can use the `use-pipe-settings.tsx` hook.
+
+```ts
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
+
+export function SettingsComponent() {
+  const { settings, updateSettings, loading } = usePipeSettings();
+
+  if (loading) return <div>loading...</div>;
+
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target as HTMLFormElement);
+        await updateSettings({
+          customSetting: formData.get("customSetting") as string,
+          anotherSetting: parseInt(formData.get("anotherSetting") as string),
+        });
+      }}
+    >
+      <input name="customSetting" defaultValue={settings?.customSetting} />
+      <input
+        name="anotherSetting"
+        type="number"
+        defaultValue={settings?.anotherSetting}
+      />
+      <button type="submit">save</button>
+    </form>
+  );
+}
+```
+
+# Screen Pipe API Types
+
+```ts
+index.d.ts
+---
+
+import { S as Settings, N as NotificationOptions, I as InputAction, a as ScreenpipeQueryParams, b as ScreenpipeResponse } from './types-DlwJxlZs.js';
+export { j as AIProviderType, i as ActionResponse, A as AudioContent, d as ContentItem, C as ContentType, E as EmbeddedLLMConfig, p as EventStreamResponse, g as InboxMessage, h as InboxMessageAction, e as InputControlResponse, f as NotificationAction, O as OCRContent, P as PaginationInfo, m as ParsedConfig, l as PipeConfig, c as Speaker, T as TranscriptionChunk, n as TranscriptionStreamResponse, U as UiContent, k as User, V as VisionEvent, o as VisionStreamResponse } from './types-DlwJxlZs.js';
+import { SettingsManager } from './SettingsManager.js';
+import { InboxManager } from './InboxManager.js';
+
+type Result<T> = {
+    success: true;
+    data: T;
+} | {
+    success: false;
+    error: any;
+};
+declare class PipesManager {
+    list(): Promise<Result<string[]>>;
+    download(url: string): Promise<Result<Record<string, any>>>;
+    enable(pipeId: string): Promise<boolean>;
+    disable(pipeId: string): Promise<boolean>;
+    update(pipeId: string, config: {
+        [key: string]: string;
+    }): Promise<boolean>;
+    info(pipeId: string): Promise<Result<Record<string, any>>>;
+    downloadPrivate(url: string, pipeName: string, pipeId: string): Promise<Result<Record<string, any>>>;
+    delete(pipeId: string): Promise<boolean>;
+}
+
+declare function getDefaultSettings(): Settings;
+
+declare class NodePipe {
+    private analyticsInitialized;
+    private analyticsEnabled;
+    input: {
+        type: (text: string) => Promise<boolean>;
+        press: (key: string) => Promise<boolean>;
+        moveMouse: (x: number, y: number) => Promise<boolean>;
+        click: (button: "left" | "right" | "middle") => Promise<boolean>;
+    };
+    settings: SettingsManager;
+    inbox: InboxManager;
+    pipes: PipesManager;
+    sendDesktopNotification(options: NotificationOptions): Promise<boolean>;
+    sendInputControl(action: InputAction): Promise<boolean>;
+    /**
+     * Query Screenpipe for content based on various filters.
+     *
+     * @param params - Query parameters for filtering Screenpipe content
+     * @returns Promise resolving to the Screenpipe response or null
+     *
+     * @example
+     * // Basic search for recent browser activity on a specific website
+     * const githubActivity = await pipe.queryScreenpipe({
+     *   browserUrl: "github.com",
+     *   contentType: "ocr",
+     *   limit: 20,
+     *   includeFrames: true
+     * });
+     *
+     * @example
+     * // Search for specific text on a particular website with date filters
+     * const searchResults = await pipe.queryScreenpipe({
+     *   q: "authentication",
+     *   browserUrl: "auth0.com",
+     *   appName: "Chrome",
+     *   contentType: "ocr",
+     *   startTime: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+     *   endTime: new Date().toISOString(),
+     *   limit: 50
+     * });
+     *
+     * @example
+     * // Track history of visits to a specific web application
+     * type VisitSession = {
+     *   timestamp: string;
+     *   title: string;
+     *   textContent: string;
+     *   imageData?: string;
+     * };
+     *
+     * async function getAppUsageHistory(domain: string): Promise<VisitSession[]> {
+     *   try {
+     *     const results = await pipe.queryScreenpipe({
+     *       browserUrl: domain,
+     *       contentType: "ocr",
+     *       includeFrames: true,
+     *       limit: 100,
+     *       startTime: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() // last 30 days
+     *     });
+     *
+     *     return results.data
+     *       .filter(item => item.type === "OCR")
+     *       .map(item => {
+     *         const ocrItem = item.content as OCRContent;
+     *         return {
+     *           timestamp: ocrItem.timestamp,
+     *           title: ocrItem.windowName || '',
+     *           textContent: ocrItem.text,
+     *           imageData: ocrItem.frame
+     *         };
+     *       });
+     *   } catch (error) {
+     *     console.error("Failed to retrieve app usage history:", error);
+     *     return [];
+     *   }
+     * }
+     *
+     * @example
+     * // Combining browserUrl with speaker filters for meeting recordings in browser
+     * import { pipe, ContentType, ScreenpipeResponse } from '@screenpipe/js';
+     *
+     * interface MeetingData {
+     *   url: string;
+     *   speakerName: string;
+     *   transcript: string;
+     *   timestamp: string;
+     * }
+     *
+     * async function getMeetingTranscripts(
+     *   meetingUrl: string,
+     *   speakerIds: number[]
+     * ): Promise<MeetingData[]> {
+     *   try {
+     *     const results = await pipe.queryScreenpipe({
+     *       browserUrl: meetingUrl,
+     *       contentType: "audio" as ContentType,
+     *       speakerIds: speakerIds,
+     *       limit: 200
+     *     });
+     *
+     *     return results.data
+     *       .filter(item => item.type === "Audio")
+     *       .map(item => {
+     *         const audioItem = item.content;
+     *         return {
+     *           url: meetingUrl,
+     *           speakerName: audioItem.speaker?.name || 'Unknown',
+     *           transcript: audioItem.transcription,
+     *           timestamp: audioItem.timestamp
+     *         };
+     *       });
+     *   } catch (error) {
+     *     console.error(`Error fetching meeting transcripts for ${meetingUrl}:`, error);
+     *     return [];
+     *   }
+     * }
+     */
+    queryScreenpipe(params: ScreenpipeQueryParams): Promise<ScreenpipeResponse | null>;
+    private initAnalyticsIfNeeded;
+    captureEvent(eventName: string, properties?: Record<string, any>): Promise<void>;
+    captureMainFeatureEvent(featureName: string, properties?: Record<string, any>): Promise<void>;
+}
+declare const pipe: NodePipe;
+
+export { InputAction, NotificationOptions, ScreenpipeQueryParams, ScreenpipeResponse, Settings, getDefaultSettings, pipe };
+
+-- types.dt.s
+/**
+ * Types of content that can be queried in Screenpipe.
+ */
+type ContentType = "all" | "ocr" | "audio" | "ui" | "audio+ui" | "ocr+ui" | "audio+ocr";
+/**
+ * Parameters for querying Screenpipe.
+ */
+interface ScreenpipeQueryParams {
+    /** Optional search query text */
+    q?: string;
+    /** Type of content to search for (default: "all") */
+    contentType?: ContentType;
+    /** Maximum number of results to return (default: 10) */
+    limit?: number;
+    /** Number of results to skip (for pagination) */
+    offset?: number;
+    /** Filter results after this ISO timestamp (e.g. "2023-01-01T00:00:00Z") */
+    startTime?: string;
+    /** Filter results before this ISO timestamp (e.g. "2023-01-01T00:00:00Z") */
+    endTime?: string;
+    /** Filter by application name (e.g. "chrome", "vscode") */
+    appName?: string;
+    /** Filter by window title */
+    windowName?: string;
+    /** Include base64-encoded screenshot frames in results */
+    includeFrames?: boolean;
+    /** Filter by minimum text length */
+    minLength?: number;
+    /** Filter by maximum text length */
+    maxLength?: number;
+    /** Filter by specific speaker IDs */
+    speakerIds?: number[];
+    /** Filter by frame name */
+    frameName?: string;
+    /** Filter by browser URL (for web content) */
+    browserUrl?: string;
+}
+/**
+ * Structure of OCR (Optical Character Recognition) content.
+ */
+interface OCRContent {
+    frameId: number;
+    text: string;
+    timestamp: string;
+    filePath: string;
+    offsetIndex: number;
+    appName: string;
+    windowName: string;
+    tags: string[];
+    frame?: string;
+    frameName?: string;
+    browserUrl?: string;
+    focused?: boolean;
+}
+/**
+ * Structure of audio content.
+ */
+interface AudioContent {
+    chunkId: number;
+    transcription: string;
+    timestamp: string;
+    filePath: string;
+    offsetIndex: number;
+    tags: string[];
+    deviceName: string;
+    deviceType: string;
+    speaker?: Speaker;
+    startTime?: number;
+    endTime?: number;
+}
+/**
+ * Structure of UI content.
+ */
+interface UiContent {
+    id: number;
+    text: string;
+    timestamp: string;
+    appName: string;
+    windowName: string;
+    initialTraversalAt?: string;
+    filePath: string;
+    offsetIndex: number;
+    frameName?: string;
+    browserUrl?: string;
+}
+/**
+ * Speaker information
+ */
+interface Speaker {
+    id: number;
+    name?: string;
+    metadata?: string;
+}
+/**
+ * Union type for different types of content items.
+ */
+type ContentItem = {
+    type: "OCR";
+    content: OCRContent;
+} | {
+    type: "Audio";
+    content: AudioContent;
+} | {
+    type: "UI";
+    content: UiContent;
+};
+/**
+ * Pagination information for search results.
+ */
+interface PaginationInfo {
+    limit: number;
+    offset: number;
+    total: number;
+}
+/**
+ * Structure of the response from a Screenpipe query.
+ */
+interface ScreenpipeResponse {
+    data: ContentItem[];
+    pagination: PaginationInfo;
+}
+/**
+ * Input control action types
+ */
+type InputAction = {
+    type: "WriteText";
+    data: string;
+} | {
+    type: "KeyPress";
+    data: string;
+} | {
+    type: "MouseMove";
+    data: {
+        x: number;
+        y: number;
+    };
+} | {
+    type: "MouseClick";
+    data: "left" | "right" | "middle";
+};
+/**
+ * Response from input control operations
+ */
+interface InputControlResponse {
+    success: boolean;
+}
+/**
+ * Notification options
+ */
+interface NotificationOptions {
+    title: string;
+    body: string;
+    actions?: NotificationAction[];
+    timeout?: number;
+    persistent?: boolean;
+}
+interface NotificationAction {
+    id: string;
+    label: string;
+    callback?: () => Promise<void>;
+}
+/**
+ * Inbox message structure
+ */
+interface InboxMessage {
+    title: string;
+    body: string;
+    actions?: InboxMessageAction[];
+}
+interface InboxMessageAction {
+    label: string;
+    action: string;
+    callback: () => Promise<void>;
+}
+interface ActionResponse {
+    action: string;
+}
+/**
+ * Settings types
+ */
+type AIProviderType = "native-ollama" | "openai" | "custom" | "embedded" | "screenpipe-cloud";
+interface EmbeddedLLMConfig {
+    enabled: boolean;
+    model: string;
+    port: number;
+}
+interface User {
+    id?: string;
+    email?: string;
+    name?: string;
+    image?: string;
+    token?: string;
+    clerk_id?: string;
+    credits?: {
+        amount: number;
+    };
+}
+interface Settings {
+    openaiApiKey: string;
+    deepgramApiKey: string;
+    aiModel: string;
+    aiUrl: string;
+    customPrompt: string;
+    port: number;
+    dataDir: string;
+    disableAudio: boolean;
+    ignoredWindows: string[];
+    includedWindows: string[];
+    aiProviderType: AIProviderType;
+    embeddedLLM: EmbeddedLLMConfig;
+    enableFrameCache: boolean;
+    enableUiMonitoring: boolean;
+    aiMaxContextChars: number;
+    analyticsEnabled: boolean;
+    user: User;
+    customSettings?: Record<string, any>;
+    monitorIds: string[];
+    audioDevices: string[];
+    audioTranscriptionEngine: string;
+    enableRealtimeAudioTranscription: boolean;
+    realtimeAudioTranscriptionEngine: string;
+    disableVision: boolean;
+}
+/**
+ * Pipe configuration types
+ */
+interface PipeConfig {
+    [key: string]: any;
+}
+interface ParsedConfig<T = unknown> {
+    fields: {
+        name: string;
+        value?: T;
+        default?: T;
+    }[];
+}
+interface TranscriptionChunk {
+    transcription: string;
+    timestamp: string;
+    device: string;
+    is_input: boolean;
+    is_final: boolean;
+    speaker?: string;
+}
+interface TranscriptionStreamResponse {
+    id: string;
+    object: string;
+    created: number;
+    model: string;
+    choices: Array<{
+        text: string;
+        index: number;
+        finish_reason: string | null;
+    }>;
+    metadata?: {
+        timestamp: string;
+        device: string;
+        isInput: boolean;
+        speaker?: string;
+    };
+}
+interface VisionEvent {
+    image?: string;
+    text: string;
+    timestamp: string;
+    app_name?: string;
+    window_name?: string;
+    browser_url?: string;
+}
+interface VisionStreamResponse {
+    type: string;
+    data: VisionEvent;
+}
+interface EventStreamResponse {
+    name: string;
+    data: VisionEvent | TranscriptionChunk | any;
+}
+
+export type { AudioContent as A, ContentType as C, EmbeddedLLMConfig as E, InputAction as I, NotificationOptions as N, OCRContent as O, PaginationInfo as P, Settings as S, TranscriptionChunk as T, UiContent as U, VisionEvent as V, ScreenpipeQueryParams as a, ScreenpipeResponse as b, Speaker as c, ContentItem as d, InputControlResponse as e, NotificationAction as f, InboxMessage as g, InboxMessageAction as h, ActionResponse as i, AIProviderType as j, User as k, PipeConfig as l, ParsedConfig as m, TranscriptionStreamResponse as n, VisionStreamResponse as o, EventStreamResponse as p };
+
+-- InboxManager.d.ts
+
+import { g as InboxMessage } from './types-DlwJxlZs.js';
+
+declare class InboxManager {
+    private actionServerPort?;
+    private actionServerProcess?;
+    send(message: InboxMessage): Promise<boolean>;
+}
+
+export { InboxManager };
+
+-- SettingsManager.d.ts
+
+import { S as Settings } from './types-DlwJxlZs.js';
+
+declare class SettingsManager {
+    private settings;
+    private storePath;
+    private initialized;
+    constructor();
+    private getStorePath;
+    init(): Promise<void>;
+    save(): Promise<void>;
+    get<K extends keyof Settings>(key: K): Promise<Settings[K]>;
+    set<K extends keyof Settings>(key: K, value: Settings[K]): Promise<void>;
+    getAll(): Promise<Settings>;
+    update(newSettings: Partial<Settings>): Promise<void>;
+    reset(): Promise<void>;
+    resetKey<K extends keyof Settings>(key: K): Promise<void>;
+    getCustomSetting(namespace: string, key: string): Promise<any>;
+    setCustomSetting(namespace: string, key: string, value: any): Promise<void>;
+    getNamespaceSettings(namespace: string): Promise<Record<string, any> | undefined>;
+    updateNamespaceSettings(namespace: string, settings: Record<string, any>): Promise<void>;
+}
+
+export { SettingsManager };
+
+```
