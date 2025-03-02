@@ -63,6 +63,7 @@ interface ConnectionState {
   task: string;
   warningCount: number; // how many flagged messages
   shadowBanned: boolean; // if user is shadow banned
+  hasSetValidUserId: boolean; // flag to track if a valid userId has been set via hello message
 }
 
 // Scoreboard entry in ephemeral memory
@@ -100,6 +101,7 @@ export default class ChatServer implements Party.Server {
       warningCount: 0,
       shadowBanned: false,
       userId: connection.id,
+      hasSetValidUserId: false, // Initialize as false until hello message is received
     });
 
     // Retrieve existing messages from ephemeral storage
@@ -116,6 +118,15 @@ export default class ChatServer implements Party.Server {
   }
 
   /**
+   * Helper method to check if a connection has a valid userId set via hello message
+   */
+  private hasValidUserId(
+    connection: Party.Connection<ConnectionState>
+  ): boolean {
+    return connection.state?.hasSetValidUserId === true;
+  }
+
+  /**
    * onMessage
    * Called when a user sends a message. We parse JSON, then handle it
    * based on its 'type'.
@@ -125,6 +136,8 @@ export default class ChatServer implements Party.Server {
    * - "chat": user sends chat text
    * - "set_score": user updates their scoreboard score
    * - "get_debug_state": returns debug information about user state
+   * - "clear_messages": clears all chat messages from storage
+   * - "clear_leaderboard": clears the leaderboard/scoreboard
    */
   async onMessage(raw: string, sender: Party.Connection<ConnectionState>) {
     let data: any;
@@ -135,27 +148,9 @@ export default class ChatServer implements Party.Server {
       return;
     }
 
-    switch (data.type) {
-      case "hello": {
-        if (data.userId) {
-          const currentState = sender.state || {
-            username: "Anonymous",
-            score: 0,
-            task: "none",
-            warningCount: 0,
-            shadowBanned: false,
-            userId: sender.id,
-          };
-
-          sender.setState({
-            ...currentState,
-            userId: data.userId,
-          });
-        }
-        break;
-      }
-      case "set_name": {
-        // ephemeral rename
+    // Special case: always allow "hello" messages to set the userId
+    if (data.type === "hello") {
+      if (data.userId) {
         const currentState = sender.state || {
           username: "Anonymous",
           score: 0,
@@ -163,7 +158,38 @@ export default class ChatServer implements Party.Server {
           warningCount: 0,
           shadowBanned: false,
           userId: sender.id,
+          hasSetValidUserId: false,
         };
+
+        sender.setState({
+          ...currentState,
+          userId: data.userId,
+          hasSetValidUserId: true, // Mark that a valid userId has been set
+        });
+
+        console.log("onConnect", sender.id, data.userId);
+      }
+      return; // Exit after processing hello message
+    }
+
+    // For all other message types, bail out if no valid userId has been set
+    if (!this.hasValidUserId(sender)) {
+      // Optionally send an error message back to the client
+      const errorMsg = {
+        type: "error",
+        message:
+          "No valid userId set. Please send a 'hello' message with userId first.",
+        timestamp: Date.now(),
+      };
+      sender.send(JSON.stringify(errorMsg));
+      return;
+    }
+
+    // Process other message types only if a valid userId has been set
+    switch (data.type) {
+      case "set_name": {
+        // ephemeral rename
+        const currentState = sender.state!; // We know this exists because we checked hasValidUserId
         sender.setState({
           ...currentState,
           username: data.name || "Anonymous",
@@ -174,14 +200,7 @@ export default class ChatServer implements Party.Server {
       case "chat": {
         // If user is shadow banned, we do not broadcast
         // but we let them see their own message
-        const currentState = sender.state || {
-          username: "Anonymous",
-          score: 0,
-          task: "none",
-          warningCount: 0,
-          shadowBanned: false,
-          userId: sender.id,
-        };
+        const currentState = sender.state!;
         const { shadowBanned, username, warningCount } = currentState;
         const text = data.text || "";
 
@@ -251,18 +270,12 @@ export default class ChatServer implements Party.Server {
          * Example shape:
          * { type: "set_score", score: <number> }
          */
-        const userId = sender.id;
+        // Always use the userId from the state (set via hello message)
+        const currentState = sender.state!;
+        const userId = currentState.userId; // Use the userId from state, not from the message
         const newScore = typeof data.score === "number" ? data.score : 0;
 
         // update ephemeral connection state
-        const currentState = sender.state || {
-          username: "Anonymous",
-          score: 0,
-          task: "none",
-          warningCount: 0,
-          shadowBanned: false,
-          userId: sender.id,
-        };
         sender.setState({
           ...currentState,
           score: newScore,
@@ -307,14 +320,7 @@ export default class ChatServer implements Party.Server {
          *
          * Returns the user's current state and all connected users' states
          */
-        const currentState = sender.state || {
-          username: "Anonymous",
-          score: 0,
-          task: "none",
-          warningCount: 0,
-          shadowBanned: false,
-          userId: sender.id,
-        };
+        const currentState = sender.state!;
 
         // Get all connected users
         const connections = Array.from(this.room.connections.entries());
@@ -327,6 +333,7 @@ export default class ChatServer implements Party.Server {
             warningCount: 0,
             shadowBanned: false,
             userId: id,
+            hasSetValidUserId: false,
           },
         }));
 
@@ -341,6 +348,49 @@ export default class ChatServer implements Party.Server {
 
         // Send only to the requesting user
         sender.send(JSON.stringify(debugStateMsg));
+        break;
+      }
+
+      case "clear_messages": {
+        /**
+         * Example shape:
+         * { type: "clear_messages" }
+         *
+         * Clears all chat messages from storage
+         */
+        await this.room.storage.put("messages", []);
+
+        // Notify all users that messages have been cleared
+        const systemMsg: ChatMessage = {
+          type: "chat",
+          from: "System",
+          text: "All messages have been cleared by an administrator.",
+          timestamp: Date.now(),
+        };
+        this.room.broadcast(JSON.stringify(systemMsg));
+        break;
+      }
+
+      case "clear_leaderboard": {
+        /**
+         * Example shape:
+         * { type: "clear_leaderboard" }
+         *
+         * Clears the leaderboard/scoreboard
+         */
+        await this.room.storage.put("scoreboard", []);
+
+        // Broadcast empty scoreboard to all
+        await this.broadcastScoreboard();
+
+        // Notify all users that the leaderboard has been cleared
+        const systemMsg: ChatMessage = {
+          type: "chat",
+          from: "System",
+          text: "The leaderboard has been cleared by an administrator.",
+          timestamp: Date.now(),
+        };
+        this.room.broadcast(JSON.stringify(systemMsg));
         break;
       }
 
@@ -378,5 +428,85 @@ export default class ChatServer implements Party.Server {
       scoreboard,
     };
     connection.send(JSON.stringify(msg));
+  }
+
+  /**
+   * onRequest
+   * Handles HTTP requests to the PartyKit server.
+   * This allows server-to-server communication without a WebSocket connection.
+   *
+   * Currently supports:
+   * - POST with { type: "set_score", userId: string, score: number }
+   */
+  async onRequest(req: Party.Request): Promise<Response> {
+    // Only allow POST requests
+    if (req.method !== "POST") {
+      return new Response("Method not allowed", { status: 405 });
+    }
+
+    try {
+      // Parse the request body
+      const data = (await req.json()) as {
+        type: string;
+        userId?: string;
+        score?: number;
+      };
+
+      // Handle different request types
+      switch (data.type) {
+        case "set_score": {
+          if (!data.userId || typeof data.score !== "number") {
+            return new Response("Invalid request: missing userId or score", {
+              status: 400,
+            });
+          }
+
+          const userId = data.userId;
+          const newScore = data.score;
+
+          // Update scoreboard in ephemeral storage
+          const scoreboard =
+            (await this.room.storage.get<ScoreboardEntry[]>("scoreboard")) ??
+            [];
+
+          // Find existing entry by userId
+          const idx = scoreboard.findIndex((e) => e.userId === userId);
+          if (idx >= 0) {
+            scoreboard[idx].score = newScore;
+            // Keep the existing username
+          } else {
+            scoreboard.push({
+              userId,
+              username: "Anonymous", // Default username for HTTP requests
+              score: newScore,
+            });
+          }
+
+          // Sort descending by score, then alpha by username
+          scoreboard.sort((a, b) => {
+            if (b.score !== a.score) {
+              return b.score - a.score;
+            }
+            return a.username.localeCompare(b.username);
+          });
+
+          await this.room.storage.put("scoreboard", scoreboard);
+
+          // Broadcast updated scoreboard to all connections
+          await this.broadcastScoreboard();
+
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        default:
+          return new Response("Unknown request type", { status: 400 });
+      }
+    } catch (error) {
+      console.error("Error handling request:", error);
+      return new Response("Internal server error", { status: 500 });
+    }
   }
 }

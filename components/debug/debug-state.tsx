@@ -3,7 +3,7 @@
 A debug component that displays user state information from the PartyKit server.
 </ai_context>
 <recent_changes>
-Created a new component for debugging user state in the PartyKit server.
+Added clear messages and clear leaderboard buttons to the debug state component.
 </recent_changes>
 */
 
@@ -21,6 +21,17 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { pipe } from "@screenpipe/browser";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 // User state in the PartyKit server
 interface ConnectionState {
@@ -48,6 +59,8 @@ export function DebugState() {
   const [userId, setUserId] = useState<string>("");
   const [debugState, setDebugState] = useState<DebugStateMessage | null>(null);
   const [loading, setLoading] = useState(false);
+  const [clearingMessages, setClearingMessages] = useState(false);
+  const [clearingLeaderboard, setClearingLeaderboard] = useState(false);
 
   // Get user ID from settings
   useEffect(() => {
@@ -75,7 +88,8 @@ export function DebugState() {
     fetchUserId();
   }, []);
 
-  const { socket, getDebugState } = usePartyKitClient(userId);
+  const { socket, getDebugState, clearMessages, clearLeaderboard } =
+    usePartyKitClient();
 
   // Listen for debug state messages
   useEffect(() => {
@@ -112,6 +126,18 @@ export function DebugState() {
     }, 5000);
   };
 
+  const handleClearMessages = () => {
+    setClearingMessages(true);
+    clearMessages();
+    setTimeout(() => setClearingMessages(false), 1000);
+  };
+
+  const handleClearLeaderboard = () => {
+    setClearingLeaderboard(true);
+    clearLeaderboard();
+    setTimeout(() => setClearingLeaderboard(false), 1000);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -119,6 +145,60 @@ export function DebugState() {
         <Button onClick={handleRequestDebugState} disabled={!socket || loading}>
           {loading ? "Loading..." : "Request Debug State"}
         </Button>
+      </div>
+
+      <div className="flex gap-4 justify-end">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="destructive"
+              disabled={!socket || clearingMessages}
+            >
+              {clearingMessages ? "Clearing..." : "Clear All Messages"}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear All Messages</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete all chat messages for all users.
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleClearMessages}>
+                Clear Messages
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="destructive"
+              disabled={!socket || clearingLeaderboard}
+            >
+              {clearingLeaderboard ? "Clearing..." : "Clear Leaderboard"}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear Leaderboard</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will reset the leaderboard and all user scores to zero.
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleClearLeaderboard}>
+                Clear Leaderboard
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {debugState ? (

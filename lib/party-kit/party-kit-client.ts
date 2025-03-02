@@ -22,6 +22,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import PartySocket from "partysocket";
+import { usePipeSettings } from "@/hooks/use-pipe-settings";
 
 const isDev = process.env.NODE_ENV !== "production";
 const HOST = isDev ? "localhost:1999" : process.env.NEXT_PUBLIC_PARTYKIT_HOST;
@@ -55,11 +56,17 @@ interface DebugStateMessage {
 /**
  * Our custom hook to unify the PartyKit connection
  */
-export function usePartyKitClient(streampipeUserId: string) {
+export function usePartyKitClient() {
+  const { settings } = usePipeSettings();
+
   const [socket, setSocket] = useState<PartySocket | null>(null);
 
   // Connect once on mount
   useEffect(() => {
+    if (!settings) return;
+    const userId = settings.screenpipeAppSettings?.user?.id;
+    if (!userId) throw new Error("No user ID found");
+
     // adjust host or config as needed for local dev vs production
     const ws = new PartySocket({
       host: HOST!, // replace with your actual PartyKit dev host if needed
@@ -68,7 +75,7 @@ export function usePartyKitClient(streampipeUserId: string) {
 
     ws.addEventListener("open", () => {
       // As soon as the socket opens, send the user ID to the PartyKit server
-      ws.send(JSON.stringify({ type: "hello", userId: streampipeUserId }));
+      ws.send(JSON.stringify({ type: "hello", userId }));
     });
 
     setSocket(ws);
@@ -77,7 +84,7 @@ export function usePartyKitClient(streampipeUserId: string) {
     return () => {
       ws.close();
     };
-  }, []);
+  }, [settings]);
 
   /**
    * setName
@@ -120,11 +127,31 @@ export function usePartyKitClient(streampipeUserId: string) {
     socket.send(JSON.stringify({ type: "get_debug_state" }));
   }
 
+  /**
+   * clearMessages
+   * Requests the server to clear all chat messages
+   */
+  function clearMessages() {
+    if (!socket) return;
+    socket.send(JSON.stringify({ type: "clear_messages" }));
+  }
+
+  /**
+   * clearLeaderboard
+   * Requests the server to clear the leaderboard/scoreboard
+   */
+  function clearLeaderboard() {
+    if (!socket) return;
+    socket.send(JSON.stringify({ type: "clear_leaderboard" }));
+  }
+
   return {
     socket,
     setName,
     sendChat,
     setScore,
     getDebugState,
+    clearMessages,
+    clearLeaderboard,
   };
 }

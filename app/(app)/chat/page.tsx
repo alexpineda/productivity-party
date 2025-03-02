@@ -76,13 +76,8 @@ export default function ChatPage() {
   const socketRef = useRef<PartySocket | null>(null);
 
   // from usePartyKitClient
-  const { socket, setName, sendChat } = usePartyKitClient(
-    settings?.screenpipeAppSettings?.user?.id || ""
-  );
+  const { socket, setName, sendChat } = usePartyKitClient();
 
-  if (!settings?.screenpipeAppSettings?.user?.id) {
-    throw new Error("No user ID found");
-  }
   // Keep a scroll ref for chat history
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);

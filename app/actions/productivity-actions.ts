@@ -31,6 +31,7 @@ import {
   partitionIntoBlocks,
   chunkTextForLLM,
 } from "@/lib/utilities/classification-utils";
+import { updatePartyKitScore } from "./partykit-actions";
 
 /**
  * Fetch the last 15 minutes of screen usage from Screenpipe (OCR + UI),
@@ -182,6 +183,9 @@ export async function updateUserScore(scoreDelta: number): Promise<number> {
       productivityScore: newScore,
     },
   });
+
+  // Update the PartyKit server directly
+  await updatePartyKitScore(newScore);
 
   return newScore;
 }

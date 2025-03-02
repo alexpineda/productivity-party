@@ -6,12 +6,13 @@ import {
   updateUserScore,
 } from "@/app/actions/productivity-actions";
 import { classifyBlock } from "@/app/actions/classify-actions";
-
+import { appendToLog } from "@/lib/utilities/log-utils";
 export async function GET(request: NextRequest) {
   try {
+    appendToLog("calcscore route called");
     // 1. Pull raw blocks for the last ~15 mins
     const blocks = await getProductivityData();
-
+    appendToLog(blocks);
     // 2. Classify each block (if not already classified)
     //    This might be done individually, or you might do it in getProductivityData,
     //    depending on how you structured your code.
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
     // 4. Update user’s total score
     const newScore = await updateUserScore(scoreDelta);
 
-    console.log("calcscore - updated user score:", { scoreDelta, newScore });
+    appendToLog({ scoreDelta, newScore });
 
     return NextResponse.json({ success: true, scoreDelta, newScore });
   } catch (error: any) {

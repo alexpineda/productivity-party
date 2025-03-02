@@ -40,6 +40,7 @@ interface ScoreboardEntry {
 
 export default function LeaderboardPage() {
   const { settings } = usePipeSettings();
+
   // local scoreboard
   const [scoreboard, setScoreboard] = useState<ScoreboardEntry[]>([]);
   // local user score input
@@ -48,41 +49,17 @@ export default function LeaderboardPage() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
 
   // We use a custom hook that returns the PartySocket instance or something similar
-  const { socket, setScore } = usePartyKitClient(
-    settings?.screenpipeAppSettings?.user?.id || ""
-  );
-
-  if (!settings?.screenpipeAppSettings?.user?.id) {
-    throw new Error("No user ID found");
-  }
+  const { socket, setScore } = usePartyKitClient();
 
   // TODO: load user score from server
 
   // Listen for user ID from messages
   useEffect(() => {
-    if (!socket) return;
-
-    function handleMessage(event: MessageEvent) {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "user_info" && msg.userId) {
-          setCurrentUserId(msg.userId);
-        }
-      } catch (err) {
-        // ignore parse errors
-      }
-    }
-
-    socket.addEventListener("message", handleMessage);
-
-    // Request user info when connected
-    socket.send(JSON.stringify({ type: "get_user_info" }));
-
-    // cleanup
-    return () => {
-      socket.removeEventListener("message", handleMessage);
-    };
-  }, [socket]);
+    if (!settings) return;
+    if (!settings.screenpipeAppSettings?.user?.id)
+      throw new Error("No user ID found");
+    setCurrentUserId(settings.screenpipeAppSettings?.user?.id || "");
+  }, [settings]);
 
   // Listen for scoreboard messages from the server
   useEffect(() => {

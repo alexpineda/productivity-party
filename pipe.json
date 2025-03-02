@@ -1,10 +1,6 @@
 {
   "crons": [
     {
-      "path": "/api/pipeline",
-      "schedule": "0 0 11 * * *"
-    },
-    {
       "path": "/api/calcscore",
       "schedule": "0 */5 * * * *"
     }
