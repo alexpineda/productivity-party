@@ -1,54 +1,351 @@
-This is a screenpipe plugin. It is a embedded NextJS app within a node environment.
+# Project Instructions
+
+Use this specification and these guidelines as you build the **Screenpipe Plugin**.
+
+Write the complete code for every step—no shortcuts.
+
+The goal is to fully implement whatever is requested.
+
+You’ll see tags in the code. These are context tags that help you understand the codebase.
 
 The screenpipe sdk and api documentation can be found in: `screenpipe_docs.md`
 
-# Components
+## Overview
 
-Components should always be "use client". Access screenpipe features using `@screenpipe/browser`.
+This is a **Next.js plugin** for Screenpipe. It is embedded within a Node environment and uses:
 
-# API Endpoints
+- **Next.js** (App Router)
+- **Tailwind**
+- **Shadcn** (UI components)
+- **Screenpipe** browser/server SDK (`@screenpipe/browser` and `@screenpipe/js`)
+- OpenAI SDK for calling LLMs
 
-API endpoints can use node libraries.
+## Project Structure
 
-Access screenpipe features using `@screenpipe/js`.
+- `app` - Next.js app router
+  - actions - NextJS Server Actions
+  - `api` - API routes
+    - `route.ts` - Example routes referencing `@screenpipe/js`
+  - `(app)` app subgroup for routes
+    - `page.ts` - the profile configuration is the home page
+    - `chat` chat with other users via partykit
+    - `leaderboard` see the productivity leaderboard
+    - `productivity` see productivity data and configuration
+    - `debug` debug helper for dev environment
+  - `route` - An example route
+    - `_components` - One-off components for the route
+    - `layout.tsx` - Layout for the route
+    - `page.tsx` - Page for the route
+- `components` - Shared components
+  - `ui` - UI components
+  - `utilities` - Utility components
+- `hooks` - Custom react hooks
+- `lib` - Library code
+  - `types` - Shared types
+  - Other utility files
+- `party-server` - Partykit server code
+- `public` - Static assets
+- `scripts` - Misc or build scripts
+- `tsconfig.json`, `tailwind.config.ts`, `next.config.mjs`, etc.
 
-# AI
+## 1. General Rules
 
-When using AI, use the screenpipe style of calling. Default to `gpt-4o`.
+1. Use `@` to import from your local app code, unless you are importing from external packages (e.g., `@screenpipe/js`, `@screenpipe/browser`, `react`, etc.).
+2. Use **kebab-case** for files and folders unless otherwise specified.
+3. **Don’t update** Shadcn components unless explicitly told to.
+4. We do not use our own environment variables. Any custom variable should be stored in user settings.
+
+#### Type Rules
+
+Follow these rules when working with types.
+
+- When importing types, use `@/types`
+- Name files like `example-types.ts`
+- All types should go in `types`
+- Make sure to export the types in `types/index.ts`
+- Prefer interfaces over type aliases
+
+An example of a type:
+
+`types/actions-types.ts`
 
 ```ts
+export type ActionState<T> =
+  | { isSuccess: true; message: string; data: T }
+  | { isSuccess: false; message: string; data?: never };
+```
+
+And exporting it:
+
+`types/index.ts`
+
+```ts
+export * from "./actions-types";
+```
+
+## 2. Screenpipe-Specific Rules
+
+#### Using the Screenpipe SDK
+
+- **Client Components** should import from `@screenpipe/browser`.
+- **Server Components** and **API routes** should import from `@screenpipe/js`. Prefer API routes over server components.
+- You can also call the local REST endpoints (e.g., `http://localhost:3030/search`) directly if needed, but prefer the SDK methods.
+
+#### Searching & Data Access
+
+- Use `pipe.queryScreenpipe(...)` or `pipe.settings` as provided by `@screenpipe/js` or `@screenpipe/browser`.
+- For advanced queries, use `POST /raw_sql` (still from the server side or API route).
+
+#### Storing Plugin Data
+
+- Use localstorage on client components. No plugin specific storage besides user settings and localstorage.
+
+---
+
+## 3. Relevant REST Endpoints
+
+Here is a quick list of Screenpipe endpoints that are typically used in a plugin context. All routes default to `http://localhost:3030`.
+
+6. **Search**
+
+   - **`GET /search`**
+   - **Purpose**: Find captured screen or audio content (OCR text, transcripts, UI data).
+   - **Key Query Params**:
+     - `q` (optional, single word)
+     - `content_type` (`ocr`, `audio`, `ui`, or combos like `ocr+audio`)
+     - `start_time`, `end_time` (ISO timestamps)
+     - `app_name`, `window_name`, `speaker_ids`, etc.
+   - **Example**:
+     ```bash
+     GET /search?q=meeting&content_type=ocr&limit=10
+     ```
+
+7. **Tags**
+
+   - **`POST /tags/:content_type/:id`** (add tags), **`DELETE /tags/:content_type/:id`** (remove tags)
+   - **Purpose**: Assign or remove tags for frames (vision) or audio chunks.
+
+8. **Speakers**
+
+   - **`GET /speakers/search`**, **`POST /speakers/update`**, etc.
+   - **Purpose**: Label speakers, merge them, or mark them as hallucinations.
+   - **Example**:
+     ```bash
+     GET /speakers/search?name=John
+     POST /speakers/update { "id": 123, "name": "John Doe" }
+     ```
+
+9. **`POST /raw_sql`**
+
+   - **Purpose**: Execute raw SQL queries (read-only recommended) against Screenpipe’s SQLite DB.
+   - **Body**:
+     ```json
+     { "query": "SELECT * FROM frames LIMIT 5" }
+     ```
+
+10. **Audio/Video Device Lists**
+
+    - **`GET /audio/list`**, **`POST /vision/list`**
+    - **Purpose**: If you need to show the user which devices or monitors are available.
+
+11. **Experimental**
+
+    - **`POST /experimental/input_control`** for keyboard/mouse automation.
+    - **`/experimental/frames/merge`**, **`/experimental/validate/media`** for special cases.
+
+---
+
+## 4. Short Code Examples
+
+### 4.1 Using the SDK in Client Components
+
+```tsx
+"use client";
+import { useState, useEffect } from "react";
+import { pipe } from "@screenpipe/browser";
+
+export default function MySearchComponent() {
+  const [results, setResults] = useState([]);
+  const [query, setQuery] = useState("");
+
+  async function doSearch() {
+    const resp = await pipe.queryScreenpipe({
+      q: query,
+      contentType: "ocr",
+      limit: 5,
+      includeFrames: true,
+    });
+    if (resp) setResults(resp.data);
+  }
+
+  return (
+    <div>
+      <input value={query} onChange={(e) => setQuery(e.target.value)} />
+      <button onClick={doSearch}>Search</button>
+
+      {results.map((item) => (
+        <div key={JSON.stringify(item)}>
+          {item.type === "OCR" && <p>OCR Text: {item.content.text}</p>}
+          {item.type === "Audio" && (
+            <p>Transcript: {item.content.transcription}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### 4.2 Using the SDK in Server Components / API Routes
+
+```ts
+// pages/api/fetch-recordings.ts
+import { NextApiRequest, NextApiResponse } from "next";
+import { pipe } from "@screenpipe/js";
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  try {
+    const data = await pipe.queryScreenpipe({
+      appName: "chrome",
+      contentType: "audio",
+      limit: 10,
+    });
+    res.status(200).json({ data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+```
+
+### 4.3 Executing Raw SQL on the Screenpipe DB
+
+```ts
+// pages/api/frames-sql.ts
+import { NextApiRequest, NextApiResponse } from "next";
+import { pipe } from "@screenpipe/js";
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  try {
+    // Example: retrieve the last 5 frames
+    const resp = await fetch("http://localhost:3030/raw_sql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: "SELECT * FROM frames ORDER BY id DESC LIMIT 5",
+      }),
+    });
+    const data = await resp.json();
+    res.status(200).json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+```
+
+### 4.4 Using AI Inside Your Plugin
+
+```ts
+// usage in a server route or server component
 import { pipe } from "@screenpipe/js";
 import { OpenAI } from "openai";
-import type { Settings } from "@screenpipe/js";
 
-async function streamMeetingInsights(settings: Settings) {
+export async function handler() {
+  const settings = await pipe.settings.getAll();
+  // the user’s chosen model, or screenpipe-cloud with their purchased credits
+
   const openai = new OpenAI({
     apiKey:
-      // user has bought cloud credits from screenpipe.com
-      settings?.aiProviderType === "screenpipe-cloud"
+      settings.aiProviderType === "screenpipe-cloud"
         ? settings?.user?.token
-        : // user has provided their own api key
-          settings?.openaiApiKey,
+        : settings?.openaiApiKey,
     baseURL: settings?.aiUrl,
-    dangerouslyAllowBrowser: true, // for browser environments
   });
+
   const response = await openai.chat.completions.create({
-    model: "gpt-4o", // if user is using screenpipe-cloud, you can also use claude-3-7-sonnet or gemini-2.0-flash-lite
+    model: "gpt-4o",
     messages: [
-      {
-        role: "system",
-        content: "You are a helpful assistant.",
-      },
-      {
-        role: "user",
-        content: "How are you?",
-      },
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content: "How are you?" },
     ],
   });
 
-  const text = response.choices[0].message.content;
+  return response.choices[0].message.content;
 }
 ```
+
+---
+
+## 5. Database Schema (Read-Only)
+
+Screenpipe stores all captures in a local SQLite database.  
+Use the `/raw_sql` endpoint for read queries. Avoid writing data directly unless absolutely necessary.
+
+**Important Tables**:
+
+- **`frames`**: Screen frames (timestamp, app name, window name).
+- **`ocr_text`**: OCR text for each frame.
+- **`audio_chunks`**, **`audio_transcriptions`**: Audio data + transcripts.
+- **`speakers`** + **`speaker_embeddings`**: For speaker identification.
+- **`ui_monitoring`**: UI-scraped text data.
+
+See the provided schema snippet for a full list. Many of these also have associated FTS (full-text search) tables like `ocr_text_fts`, `audio_transcriptions_fts`, etc.
+
+---
+
+## 7. User Settings & Customization
+
+Plugins can let users configure settings (like AI model, custom preferences, etc.). Use the `usePipeSettings` hook in your client UI:
+
+```tsx
+"use client";
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
+
+export function SettingsPage() {
+  const { settings, updateSettings, loading } = usePipeSettings();
+
+  if (loading) return <p>Loading...</p>;
+
+  async function handleSave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    await updateSettings({
+      customSetting: formData.get("customSetting") as string,
+      anotherSetting: parseInt(formData.get("anotherSetting") as string, 10),
+    });
+  }
+
+  return (
+    <form onSubmit={handleSave}>
+      <input name="customSetting" defaultValue={settings?.customSetting} />
+      <input
+        name="anotherSetting"
+        type="number"
+        defaultValue={settings?.anotherSetting}
+      />
+      <button type="submit">Save</button>
+    </form>
+  );
+}
+```
+
+Or on the server side:
+
+```ts
+import { pipe } from "@screenpipe/js";
+
+async function updateSomething() {
+  const currentSettings = await pipe.settings.getAll();
+  await pipe.settings.update({ customSetting: "newVal" });
+}
+```
+
+---
 
 # Screenpipe Database Schema
 
@@ -284,45 +581,6 @@ Full-text search table for searching: transcription, device, speaker_id
 Full-text search table for searching: name, browser_url, app_name, window_name, focused
 
 
-```
-
-# Our Plugin Database
-
-Our database is a separate sqlite store. It's for any custom data we need to store specific to our plugin functionality.
-
-# User Settings
-
-If we want to read user defined settings, or create a page to allow users to change specific settings, we can use the `use-pipe-settings.tsx` hook.
-
-```ts
-import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
-
-export function SettingsComponent() {
-  const { settings, updateSettings, loading } = usePipeSettings();
-
-  if (loading) return <div>loading...</div>;
-
-  return (
-    <form
-      onSubmit={async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target as HTMLFormElement);
-        await updateSettings({
-          customSetting: formData.get("customSetting") as string,
-          anotherSetting: parseInt(formData.get("anotherSetting") as string),
-        });
-      }}
-    >
-      <input name="customSetting" defaultValue={settings?.customSetting} />
-      <input
-        name="anotherSetting"
-        type="number"
-        defaultValue={settings?.anotherSetting}
-      />
-      <button type="submit">save</button>
-    </form>
-  );
-}
 ```
 
 # Screen Pipe API Types
@@ -804,3 +1062,113 @@ declare class SettingsManager {
 export { SettingsManager };
 
 ```
+
+## 8. Final Notes
+
+- **Security**: Data is unencrypted by default but remains local.
+- **Performance**: Search or indexing over large data sets can be resource-intensive.
+- **No migrations** required for Screenpipe’s DB. You can manage your plugin’s own DB as you see fit.
+- Keep your code well-structured. Build exactly what’s requested, with full implementations.
+- You can reference Screenpipe’s database schema (read-only) via the `POST /raw_sql` route if needed. The schema includes tables like `frames`, `ocr_text`, `audio_chunks`, `audio_transcriptions`, etc.
+- For advanced tasks like controlling keyboard/mouse, see the `/experimental/input_control` endpoint (node context only).
+
+# Chat moderation
+
+Example usage of openai for chat moderation.
+
+```js
+import OpenAI from "openai";
+const openai = new OpenAI();
+
+const moderation = await openai.moderations.create({
+  model: "omni-moderation-latest",
+  input: "...text to classify goes here...",
+});
+
+console.log(moderation);
+```
+
+# Partykit for Chat Server / Client
+
+The party-server directory provides the chat server and leaderboard management.
+
+The lib/party-kit/party-kit-client.ts is for a front-end component to integrate chat and leaderboard functionality.
+
+# Classifying Screen data
+
+### 1. Strategy for Distilling Screen Data (Client-Side)
+
+**Goal**: Minimize the raw data sent to the LLM while still providing enough context to judge “productive vs unproductive.”
+
+**Approach**:
+
+1. **Capture**: Collect raw screen data (active app/window title, partial screen text, timestamps).
+2. **Chunking**: Break text into small chunks (~200–300 tokens) to avoid sending huge contexts.
+   - Example: If the user is browsing a dev site or social media, chunk it by paragraphs or by time intervals.
+3. **Feature Extraction** (before sending to LLM):
+   - Truncate or hash any sensitive user content if it’s not strictly needed.
+   - Keep only relevant phrases (e.g., “stack overflow,” “youtube,” “github.com,” “facebook,” etc.).
+4. **Prompt Construction**: Send each chunk with a short system or user prompt clarifying the user’s goal. For example:
+
+   ```txt
+   System Prompt:
+   "You classify user activity. Determine if it's 'productive' or 'unproductive' for the user's goal: software development.
+    Output only 'productive' or 'unproductive'."
+   User Prompt:
+   "Window Title: 'Chrome - StackOverflow: Python'
+    Partial Text: 'How do I parse JSON in Python? ...'
+    Timestamp: 2025-03-01 10:15"
+   ```
+
+5. **Post-Processing**: On client side, aggregate the classification results from each chunk into a single 15-minute block rating.
+   - If the LLM mostly says “productive,” label that block productive.
+   - Possibly include a confidence mechanism (e.g., “productive” 4 out of 5 times => block is productive).
+
+This ensures you’re sending only partial, anonymized data (the “distilled” info) and not entire screen captures. The final classification (true/false) can be aggregated client-side before you send the result to your backend.
+
+---
+
+### 3. Strategy for an LLM Productivity Classification
+
+Since you want a consistent approach for everyone, define clear classification rules and keep the prompt consistent:
+
+6. **System Prompt**: Outline your definition of productivity. For example:
+
+   ```txt
+   "You are an assistant that classifies user screen usage.
+    • Productive if it aligns with user’s stated goal (e.g., coding, reading documentation).
+    • Unproductive if it's purely social media, entertainment, or unrelated browsing.
+    Output only the word: 'productive' or 'unproductive'."
+   ```
+
+7. **Additional Context**: Let the user specify their role/goal once (e.g., “I’m a web developer, so YouTube is unproductive unless it’s a coding tutorial…”).
+8. **Parsing the Return**: The client just checks if the response is `"productive"` or `"unproductive"` and increments/decrements the user’s score.
+
+This approach is fair for everyone because it uses one standard set of guidelines. You can refine the rules over time if you see users gaming the system.
+
+**Handling Breaks**  
+A common approach is to classify “break time” as its own category (neither productive nor unproductive). You can detect it either automatically (no keyboard/mouse input for a certain threshold) or let the user manually toggle “break mode.”
+
+1. **Automatic Detection**
+
+   - If no activity (no clicks, keypresses, or app changes) for, say, 5+ minutes, mark that period as “break.”
+   - Store it as its own category in your logs.
+   - Skip it in productivity score calculations (or count it as neutral).
+
+2. **Manual Break Mode**
+
+   - The user can toggle “On Break” in your UI.
+   - Stop tracking or classifying screen usage in that mode.
+   - When “Break” ends, resume classification.
+
+3. **Partial Blocks**
+
+   - If a 15-minute block is half break, half active, you can split it or simply label the block by majority status.
+
+---
+
+**Turning the Program Off/On**
+
+- If the user shuts down or quits the app, treat that gap like a break or “no data.”
+- When they restart, just log the new active blocks normally.
+- No major issues—just make sure your data pipeline expects missing chunks and doesn’t penalize a user for them (like adding negative or zero by default).

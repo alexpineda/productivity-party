@@ -1,0 +1,97 @@
+/**
+ * @file navbar.tsx
+ * @description
+ * Provides a simple top navigation bar for the application. It includes links
+ * to the "Home," "Profile," "Leaderboard," and "Chat" pages.
+ *
+ * Key Features:
+ * - Uses Next.js <Link> components for client-side transitions
+ * - Renders a horizontal bar with clickable nav items
+ * - Highlights or styles the currently active link (optional extension)
+ *
+ * @notes
+ * - Imported by the layout in (app)/layout.tsx to ensure all app pages share the same nav
+ * - You could further expand this to handle user info, sign out, or theming toggles
+ */
+
+"use client";
+
+import React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+
+/**
+ * @interface NavItem
+ * Represents a single link in the Navbar
+ */
+interface NavItem {
+  label: string;
+  href: string;
+}
+
+/**
+ * @constant NAV_ITEMS
+ * An array of navigation items displayed in the top nav
+ * @type {NavItem[]}
+ */
+const NAV_ITEMS: NavItem[] = [
+  { label: "Profile", href: "/" },
+  { label: "Leaderboard", href: "/leaderboard" },
+  { label: "Chat", href: "/chat" },
+];
+
+// Check if we're in development environment
+const isDevelopment = process.env.NODE_ENV === "development";
+
+/**
+ * @function Navbar
+ * Renders a horizontal navigation bar with clickable links
+ */
+export function Navbar() {
+  const pathname = usePathname();
+
+  return (
+    <nav className="bg-white border-b border-gray-200">
+      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+        {/* Example brand logo or name */}
+        <div className="font-bold text-lg">Productivity Party</div>
+
+        {/* Navigation links */}
+        <ul className="flex items-center space-x-4">
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100",
+                    isActive && "bg-gray-100 text-blue-600"
+                  )}
+                >
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
+
+          {/* Debug link - only visible in development */}
+          {isDevelopment && (
+            <li>
+              <Link
+                href="/debug"
+                className={cn(
+                  "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 text-amber-600",
+                  pathname === "/debug" && "bg-gray-100 text-amber-700"
+                )}
+              >
+                Debug
+              </Link>
+            </li>
+          )}
+        </ul>
+      </div>
+    </nav>
+  );
+}

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://www.partykit.io/schema.json",
+  "name": "starter-pipe-party",
+  "main": "party-server/server.ts",
+  "compatibilityDate": "2025-03-01"
+}
