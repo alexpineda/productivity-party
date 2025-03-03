@@ -32,6 +32,7 @@ import {
   chunkTextForLLM,
 } from "@/lib/utilities/classification-utils";
 import { updatePartyKitScore } from "./partykit-actions";
+import { appendToLog } from "@/lib/utilities/log-utils";
 
 /**
  * Fetch the last 15 minutes of screen usage from Screenpipe (OCR + UI),
@@ -48,10 +49,12 @@ export async function getProductivityData(): Promise<ProductivityBlock[]> {
   const now = new Date();
   const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
 
+  appendToLog("getProductivityData: queryScreenpipe");
+
   try {
     // Query screenpipe for combined OCR + UI content
     const response = await pipe.queryScreenpipe({
-      contentType: "ocr+ui",
+      contentType: "ocr",
       startTime: fifteenMinutesAgo.toISOString(),
       endTime: now.toISOString(),
       limit: 1000,
@@ -101,7 +104,10 @@ export async function getProductivityData(): Promise<ProductivityBlock[]> {
 
     return productivityBlocks;
   } catch (error) {
-    console.error("getProductivityData: error retrieving screen usage", error);
+    appendToLog(
+      "getProductivityData: error retrieving screen usage",
+      String(error)
+    );
     throw new Error(`Failed to fetch or process screen data: ${String(error)}`);
   }
 }
@@ -109,13 +115,9 @@ export async function getProductivityData(): Promise<ProductivityBlock[]> {
 /**
  * @function aggregateProductivityBlocks
  * @description
- * Sums up the classification of each block to get a "score delta".
- *
- * - "productive" => +1 * activeRatio
- * - "unproductive" => -1 * activeRatio
- * - "break" => 0
- *
- * You can feed the result into updateUserScore() to persist it in user settings.
+ * Calculates a score delta based on classified productivity blocks.
+ * Productive blocks add +1, unproductive blocks subtract -1, breaks are neutral.
+ * Partial blocks are weighted by their activeRatio.
  *
  * @param blocks Array of ProductivityBlock objects (with classification set)
  * @returns total numeric score delta
@@ -124,9 +126,9 @@ export async function getProductivityData(): Promise<ProductivityBlock[]> {
  * const delta = aggregateProductivityBlocks(blocks);
  * // if user had 3 "productive" blocks, 1 "unproductive", rest break => delta = +2
  */
-export function aggregateProductivityBlocks(
+export async function aggregateProductivityBlocks(
   blocks: ProductivityBlock[]
-): number {
+): Promise<number> {
   let scoreDelta = 0;
 
   for (const block of blocks) {
@@ -164,7 +166,10 @@ export function aggregateProductivityBlocks(
  * @example
  * const newScore = await updateUserScore(2); // adds +2
  */
-export async function updateUserScore(scoreDelta: number): Promise<number> {
+export async function updateUserScore(
+  scoreDelta: number,
+  persist = true
+): Promise<number> {
   // Retrieve the current settings
   const curSettings = await pipe.settings.getAll();
 
@@ -176,16 +181,18 @@ export async function updateUserScore(scoreDelta: number): Promise<number> {
 
   const newScore = currentScore + scoreDelta;
 
-  // Save it back
-  await pipe.settings.update({
-    customSettings: {
-      ...curSettings.customSettings,
-      productivityScore: newScore,
-    },
-  });
+  if (persist) {
+    // Save it back
+    await pipe.settings.update({
+      customSettings: {
+        ...curSettings.customSettings,
+        productivityScore: newScore,
+      },
+    });
 
-  // Update the PartyKit server directly
-  await updatePartyKitScore(newScore);
+    // Update the PartyKit server directly
+    await updatePartyKitScore(newScore);
+  }
 
   return newScore;
 }

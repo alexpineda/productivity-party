@@ -79,10 +79,10 @@ export function useProductivityTracker() {
       }
 
       // 3. aggregate the final score
-      const delta = aggregateProductivityBlocks(classifiedBlocks);
+      const delta = await aggregateProductivityBlocks(classifiedBlocks);
 
       // 4. persist in user settings
-      const newScore = await updateUserScore(delta);
+      const newScore = await updateUserScore(delta, false);
 
       // 5. update local state
       setBlocks(classifiedBlocks);

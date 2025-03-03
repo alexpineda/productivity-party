@@ -61,6 +61,7 @@ interface ConnectionState {
   username: string;
   score: number;
   task: string;
+  role: string;
   warningCount: number; // how many flagged messages
   shadowBanned: boolean; // if user is shadow banned
   hasSetValidUserId: boolean; // flag to track if a valid userId has been set via hello message
@@ -98,6 +99,7 @@ export default class ChatServer implements Party.Server {
       username: "Anonymous",
       score: 0,
       task: "none",
+      role: "none",
       warningCount: 0,
       shadowBanned: false,
       userId: connection.id,
@@ -154,7 +156,8 @@ export default class ChatServer implements Party.Server {
         const currentState = sender.state || {
           username: "Anonymous",
           score: 0,
-          task: "none",
+          task: "",
+          role: "",
           warningCount: 0,
           shadowBanned: false,
           userId: sender.id,
@@ -166,6 +169,19 @@ export default class ChatServer implements Party.Server {
           userId: data.userId,
           hasSetValidUserId: true, // Mark that a valid userId has been set
         });
+
+        // Now send back ephemeral user state + scoreboard + anything else you want:
+        const scoreboard =
+          (await this.room.storage.get<ScoreboardEntry[]>("scoreboard")) ?? [];
+        const userProfile = sender.state; // ephemeral user state
+
+        sender.send(
+          JSON.stringify({
+            type: "init_sync",
+            userProfile,
+            scoreboard,
+          })
+        );
 
         console.log("onConnect", sender.id, data.userId);
       }
@@ -194,6 +210,30 @@ export default class ChatServer implements Party.Server {
           ...currentState,
           username: data.name || "Anonymous",
         });
+        break;
+      }
+
+      case "update_profile": {
+        // Update user profile (name, task, role)
+        const currentState = sender.state!;
+        sender.setState({
+          ...currentState,
+          username: data.name || currentState.username,
+          task: data.task || currentState.task,
+          role: data.role || currentState.role,
+        });
+
+        // Update scoreboard entry if it exists
+        const scoreboard =
+          (await this.room.storage.get<ScoreboardEntry[]>("scoreboard")) ?? [];
+        const idx = scoreboard.findIndex(
+          (e) => e.userId === currentState.userId
+        );
+        if (idx >= 0) {
+          scoreboard[idx].username = data.name || currentState.username;
+          await this.room.storage.put("scoreboard", scoreboard);
+          await this.broadcastScoreboard();
+        }
         break;
       }
 

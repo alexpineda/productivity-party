@@ -61,10 +61,8 @@ export default function ChatPage() {
   // We can try loading a previously set nickname from plugin settings
   // If the user never set one in the profile, we fallback to local default
   const { settings } = usePipeSettings();
-  const initialNickname = settings?.nickname || "Anonymous";
 
   // local states
-  const [nickname, setNickname] = useState<string>(initialNickname);
   const [chatInput, setChatInput] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -81,16 +79,6 @@ export default function ChatPage() {
   // Keep a scroll ref for chat history
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-
-  /**
-   * Whenever we have a new nickname, call setName on the server
-   * so the ephemeral connection state can store it.
-   */
-  useEffect(() => {
-    if (socket && nickname) {
-      setName(nickname);
-    }
-  }, [socket, nickname, setName]);
 
   /**
    * Listen for incoming messages of type "chat".
@@ -204,58 +192,11 @@ export default function ChatPage() {
           Group Chat
         </h1>
         <p className="text-gray-500 max-w-xl mx-auto">
-          Connect with others in real-time. Set your nickname and start
-          chatting!
+          Need a break? Connect with others in real-time.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="md:col-span-1 shadow-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5 text-blue-500" />
-              Profile
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col space-y-4">
-              <div className="flex justify-center">
-                <Avatar className="h-20 w-20 bg-gradient-to-r from-blue-600 to-purple-600">
-                  <AvatarFallback>{getInitials(nickname)}</AvatarFallback>
-                </Avatar>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Your Nickname
-                </label>
-                <Input
-                  type="text"
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  placeholder="Enter your nickname"
-                  className="w-full"
-                />
-              </div>
-              <div className="text-xs text-center">
-                <span
-                  className={`inline-flex items-center px-2 py-1 rounded-full ${
-                    isConnected
-                      ? "bg-green-100 text-green-800"
-                      : "bg-red-100 text-red-800"
-                  }`}
-                >
-                  <span
-                    className={`h-2 w-2 rounded-full mr-1 ${
-                      isConnected ? "bg-green-500" : "bg-red-500"
-                    }`}
-                  ></span>
-                  {isConnected ? "Connected" : "Disconnected"}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
+      <div className="">
         <Card className="md:col-span-3 shadow-md flex flex-col">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2">
@@ -281,7 +222,8 @@ export default function ChatPage() {
                   </div>
 
                   {dateMessages.map((msg, idx) => {
-                    const isCurrentUser = msg.from === nickname;
+                    // TODO: use better identifier
+                    const isCurrentUser = msg.from === settings?.nickname;
                     return (
                       <div
                         key={`${date}-${msg.timestamp}-${idx}`}

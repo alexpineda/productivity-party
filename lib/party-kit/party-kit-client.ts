@@ -87,12 +87,12 @@ export function usePartyKitClient() {
   }, [settings]);
 
   /**
-   * setName
-   * Tells the server to update ephemeral username for this connection
+   * updateProfile
+   * Tells the server to update ephemeral profile info for this connection
    */
-  function setName(name: string) {
+  function updateProfile(name: string, task: string, role: string) {
     if (!socket) return;
-    socket.send(JSON.stringify({ type: "set_name", name }));
+    socket.send(JSON.stringify({ type: "update_profile", name, task, role }));
   }
 
   /**
@@ -147,7 +147,7 @@ export function usePartyKitClient() {
 
   return {
     socket,
-    setName,
+    updateProfile,
     sendChat,
     setScore,
     getDebugState,

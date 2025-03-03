@@ -20,6 +20,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { Rocket, PartyPopper } from "lucide-react";
 
 /**
  * @interface NavItem
@@ -36,7 +37,8 @@ interface NavItem {
  * @type {NavItem[]}
  */
 const NAV_ITEMS: NavItem[] = [
-  { label: "Profile", href: "/" },
+  { label: "Profile", href: "/profile" },
+  { label: "Productivity", href: "/productivity" },
   { label: "Leaderboard", href: "/leaderboard" },
   { label: "Chat", href: "/chat" },
 ];
@@ -55,7 +57,13 @@ export function Navbar() {
     <nav className="bg-white border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Example brand logo or name */}
-        <div className="font-bold text-lg">Productivity Party</div>
+        <Link href="/" className="flex items-center space-x-2 group">
+          <div className="relative">
+            <Rocket className="h-5 w-5 text-blue-500 transform transition-transform group-hover:-translate-y-1 group-hover:rotate-12" />
+            <PartyPopper className="h-4 w-4 text-amber-500 absolute -right-2 -bottom-1 transform transition-all group-hover:scale-125" />
+          </div>
+          <div className="font-bold text-lg">Productivity Party</div>
+        </Link>
 
         {/* Navigation links */}
         <ul className="flex items-center space-x-4">

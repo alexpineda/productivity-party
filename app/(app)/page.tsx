@@ -1,279 +1,152 @@
-/**
- * @file page.tsx
- * @description
- * This file implements the user profile settings page, where the user
- * can edit their "nickname" and "current task." It utilizes our existing
- * hook `usePipeSettings` to persist these values in `pipe.settings`.
- *
- * @notes
- * - The Next.js App Router organizes this page under the "(app)/profile"
- *   route segment, so users visit "/profile" to edit their info.
- * - Because it uses `usePipeSettings` (a React hook), we mark this
- *   component with 'use client' so it can run in the browser.
- * - For demonstration, we store "nickname" and "currentTask" in the
- *   plugin's custom settings object (under `pipe` namespace).
- *
- * Key features:
- * - Displays form fields: Nickname, Current Task.
- * - Loads existing values from user settings if present.
- * - Offers a "Save Settings" button to update the plugin settings.
- * - Provides inline error or success messaging (optional).
- *
- * @dependencies
- * - React, Next.js (client components).
- * - `usePipeSettings` from "@/hooks/use-pipe-settings" for loading/saving.
- * - UI components from Shadcn (like Input, Button).
- *
- * @edge-cases
- * - No existing nickname or currentTask in settings => defaults to "".
- * - Save operation fails => we could show an error in the console (or on UI).
- */
+/*
+<ai_context>
+The main onboarding page that introduces users to the app and guides them through key features.
+</ai_context>
+<recent_changes>
+Fixed linter errors by escaping apostrophes.
+</recent_changes>
+*/
 
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
-import { usePipeSettings } from "@/hooks/use-pipe-settings";
-import { Input } from "@/components/ui/input";
+import React from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Settings } from "@/lib/types";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
-  CardDescription,
-  CardFooter,
 } from "@/components/ui/card";
-import { User, Briefcase, Save, CheckCircle } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  ArrowRight,
+  User,
+  Trophy,
+  MessageCircle,
+  ChartLine,
+} from "lucide-react";
 
-/**
- * ProfilePage
- * @description The default export for this route. Renders a simple UI allowing
- * the user to set a nickname and currentTask, then saves them in plugin settings.
- */
-export default function ProfilePage() {
-  // Load from the custom "pipe" settings object, if present
-  const { settings, updateSettings, loading } = usePipeSettings();
-  const [nickname, setNickname] = useState("");
-  const [currentTask, setCurrentTask] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [showSuccess, setShowSuccess] = useState(false);
-
-  // On first load, set local form states from the stored settings
-  useEffect(() => {
-    if (!loading && settings) {
-      // If we previously stored the nickname/currentTask in the pipe object
-      const pipeSettings = settings as Record<string, any>;
-      const storedNickname = pipeSettings.nickname || "";
-      const storedTask = pipeSettings.currentTask || "";
-
-      setNickname(storedNickname);
-      setCurrentTask(storedTask);
-    }
-  }, [loading, settings]);
-
-  /**
-   * onSave
-   * @description Handles form submission to save user settings.
-   * @param e The standard form event
-   */
-  async function onSave(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSaving(true);
-    setMessage("");
-    setShowSuccess(false);
-
-    try {
-      // Merge new data with existing settings
-      // We'll put these fields directly in "settings" for convenience
-      // The "updateSettings" function merges with customSettings.pipe by default
-      const updated: Partial<Settings> = {
-        ...settings,
-        nickname,
-        currentTask,
-      };
-
-      const success = await updateSettings(updated);
-      if (success) {
-        setMessage("Profile updated successfully!");
-        setShowSuccess(true);
-
-        // Hide success message after 3 seconds
-        setTimeout(() => {
-          setShowSuccess(false);
-          setMessage("");
-        }, 3000);
-      } else {
-        setMessage("Failed to update profile.");
-      }
-    } catch (err) {
-      console.error("Error saving user profile:", err);
-      setMessage("An error occurred while saving your profile.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // Get initials for avatar
-  const getInitials = (name: string) => {
-    if (!name) return "?";
-    return name
-      .split(" ")
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase()
-      .substring(0, 2);
-  };
-
-  if (loading) {
-    return (
-      <div className="container mx-auto py-8 px-4 max-w-4xl">
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-pulse flex flex-col items-center">
-            <div className="h-20 w-20 bg-gray-200 rounded-full mb-4"></div>
-            <div className="h-4 w-48 bg-gray-200 rounded mb-2"></div>
-            <div className="h-3 w-32 bg-gray-200 rounded"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+export default function OnboardingPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
+      {/* Welcome Header */}
       <div className="text-center mb-10">
         <h1 className="text-4xl font-bold tracking-tight mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          User Profile
+          Welcome to Productivity Party! 🎉
         </h1>
         <p className="text-gray-500 max-w-xl mx-auto">
-          Customize your profile settings and let others know what you&apos;re
-          working on.
+          Track your productivity, compete with others, and stay motivated in a
+          fun, social environment.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-1 shadow-md">
+      {/* Getting Started Steps */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* Step 1: Update Profile */}
+        <Card className="shadow-md transition-all hover:shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <User className="h-5 w-5 text-blue-500" />
-              Your Profile
+              Step 1: Set Up Your Profile
             </CardTitle>
             <CardDescription>
-              How others will see you in the chat and leaderboard
+              Start by personalizing your profile so others can recognize you.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col items-center space-y-4">
-            <Avatar className="h-32 w-32 bg-gradient-to-r from-blue-600 to-purple-600">
-              <AvatarFallback className="text-2xl">
-                {getInitials(nickname)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="text-center">
-              <h3 className="text-xl font-medium">{nickname || "Anonymous"}</h3>
-              <p className="text-sm text-gray-500">
-                {currentTask || "No current task set"}
+          <CardContent>
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-gray-600">
+                Add your nickname, role, and what you&apos;re currently working
+                on. This helps others understand your goals and productivity
+                context.
               </p>
+              <Link href="/profile">
+                <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                  Update Profile <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2 shadow-md">
+        {/* Step 2: Explore Productivity */}
+        <Card className="shadow-md transition-all hover:shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Briefcase className="h-5 w-5 text-blue-500" />
-              Edit Profile
+              <ChartLine className="h-5 w-5 text-blue-500" />
+              Step 2: Check Your Productivity
             </CardTitle>
             <CardDescription>
-              Update your profile information and current task
+              Understand how your productivity is tracked and measured.
             </CardDescription>
           </CardHeader>
-          <form onSubmit={onSave}>
-            <CardContent className="space-y-4">
-              {/* Nickname */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Nickname
-                </label>
-                <Input
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  placeholder="Enter your nickname"
-                  className="w-full"
-                />
-                <p className="text-xs text-gray-500">
-                  This will be displayed in chat messages and on the leaderboard
-                </p>
-              </div>
+          <CardContent>
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-gray-600">
+                Visit the productivity page to see how we measure your focus
+                time and calculate your score. Don&apos;t worry - all screen
+                data stays local!
+              </p>
+              <Link href="/productivity">
+                <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                  View Productivity <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
 
-              {/* Current Task */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Current Task
-                </label>
-                <Input
-                  value={currentTask}
-                  onChange={(e) => setCurrentTask(e.target.value)}
-                  placeholder="What are you working on?"
-                  className="w-full"
-                />
-                <p className="text-xs text-gray-500">
-                  Let others know what you&apos;re currently focused on
-                </p>
-              </div>
-            </CardContent>
+        {/* Step 3: Check Leaderboard */}
+        <Card className="shadow-md transition-all hover:shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-blue-500" />
+              Step 3: Visit the Leaderboard
+            </CardTitle>
+            <CardDescription>
+              See how you rank against other productive people.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-gray-600">
+                The leaderboard shows real-time rankings. As you work
+                productively, your score increases and you climb the ranks!
+              </p>
+              <Link href="/leaderboard">
+                <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                  View Leaderboard <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
 
-            <CardFooter className="flex justify-between items-center border-t pt-4">
-              <div className="flex-1">
-                {showSuccess && (
-                  <div className="flex items-center text-green-600">
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    <span className="text-sm">{message}</span>
-                  </div>
-                )}
-                {message && !showSuccess && (
-                  <p className="text-sm text-red-500">{message}</p>
-                )}
-              </div>
-              <Button
-                type="submit"
-                disabled={saving}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-              >
-                {saving ? (
-                  <span className="flex items-center">
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                    Saving...
-                  </span>
-                ) : (
-                  <span className="flex items-center">
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Settings
-                  </span>
-                )}
-              </Button>
-            </CardFooter>
-          </form>
+        {/* Step 4: Join the Chat */}
+        <Card className="shadow-md transition-all hover:shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-blue-500" />
+              Step 4: Join the Community
+            </CardTitle>
+            <CardDescription>
+              Connect with others and share your productivity journey.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-gray-600">
+                Jump into our chat room to meet other productive people, share
+                tips, or just take a quick break!
+              </p>
+              <Link href="/chat">
+                <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                  Open Chat <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
         </Card>
       </div>
     </div>
