@@ -49,12 +49,12 @@ export interface ProductivityBlock {
    * Description of the block from the AI.
    */
   aiDescription?: string;
-  
+
   /**
    * Unique identifier for the block, typically based on timestamp
    */
   id?: string;
-  
+
   /**
    * Flag to indicate if this block has been processed by the cron job
    */

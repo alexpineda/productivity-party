@@ -49,9 +49,11 @@ interface DebugStateMessage {
   type: "debug_state";
   requesterId: string;
   userState: ConnectionState;
+  userConnectionId: string;
   allUsers: {
     id: string;
     state: ConnectionState;
+    connectionId: string;
   }[];
   timestamp: number;
 }
@@ -225,6 +227,9 @@ export function DebugState() {
                 <div className="font-semibold">User ID:</div>
                 <div>{debugState.userState.userId}</div>
 
+                <div className="font-semibold">Connection ID:</div>
+                <div>{debugState.userConnectionId}</div>
+
                 <div className="font-semibold">Username:</div>
                 <div>{debugState.userState.username}</div>
 
@@ -279,8 +284,11 @@ export function DebugState() {
                     </CardHeader>
                     <CardContent className="py-2">
                       <div className="grid grid-cols-2 gap-1 text-sm">
-                        <div className="font-semibold">ID:</div>
-                        <div className="truncate">{user.id}</div>
+                        <div className="font-semibold">User ID:</div>
+                        <div className="truncate">{user.state.userId}</div>
+
+                        <div className="font-semibold">Connection ID:</div>
+                        <div className="truncate">{user.connectionId}</div>
 
                         <div className="font-semibold">Score:</div>
                         <div>{user.state.score}</div>

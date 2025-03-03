@@ -21,9 +21,11 @@ interface DebugStateMessage {
   type: "debug_state";
   requesterId: string;
   userState: ConnectionState;
+  userConnectionId: string;
   allUsers: {
     id: string;
     state: ConnectionState;
+    connectionId: string;
   }[];
   timestamp: number;
 }
@@ -235,8 +237,23 @@ export default class ChatServer implements Party.Server {
   private async updateScore(
     userId: string,
     username: string,
-    newScore: number
+    delta: number
   ) {
+    // Get the current scoreboard row
+    const db = await createServiceClient();
+    const month = this.getCurrentMonth();
+
+    // fetch existing entry
+    const { data: existing } = await db
+      .from("scoreboard")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("month", month)
+      .single();
+
+    const oldScore = existing?.score ?? 0;
+    const newScore = oldScore + delta;
+
     // Queue the score update
     this.scoreUpdateQueue.set(userId, {
       username,
@@ -548,17 +565,17 @@ export default class ChatServer implements Party.Server {
         break;
       }
 
-      case "set_score": {
+      case "update_score": {
         /**
          * Example shape:
-         * { type: "set_score", score: <number> }
+         * { type: "update_score", delta: <number> }
          */
         // Always use the userId from the state (set via hello message)
         const currentState = sender.state!;
         const userId = currentState.userId; // Use the userId from state, not from the message
-        const newScore = typeof data.score === "number" ? data.score : 0;
+        const delta = typeof data.delta === "number" ? data.delta : 0;
 
-        await this.updateScore(userId, currentState.username, newScore);
+        await this.updateScore(userId, currentState.username, delta);
         // No need to broadcast here - the batched update will do it
         break;
       }
@@ -586,7 +603,7 @@ export default class ChatServer implements Party.Server {
           this.room.getConnections<ConnectionState>()
         );
         const allUsers = connections.map((conn) => ({
-          id: conn.id,
+          id: conn.id, // Connection ID
           state: (conn.state as ConnectionState) || {
             username: "Unknown",
             task: "none",
@@ -595,6 +612,7 @@ export default class ChatServer implements Party.Server {
             userId: conn.state?.userId || "",
             hasSetValidUserId: false,
           },
+          connectionId: conn.id, // Explicitly include connection ID
         }));
 
         // Create debug state message
@@ -602,6 +620,7 @@ export default class ChatServer implements Party.Server {
           type: "debug_state",
           requesterId: sender.id,
           userState: currentState,
+          userConnectionId: sender.id, // Include the connection ID for the requesting user
           allUsers,
           timestamp: Date.now(),
         };
@@ -727,14 +746,14 @@ export default class ChatServer implements Party.Server {
       const data = (await req.json()) as {
         type: string;
         userId?: string;
-        score?: number;
+        delta?: number;
       };
 
       // Handle different request types
       switch (data.type) {
-        case "set_score": {
-          if (!data.userId || typeof data.score !== "number") {
-            return new Response("Invalid request: missing userId or score", {
+        case "update_score": {
+          if (!data.userId || typeof data.delta !== "number") {
+            return new Response("Invalid request: missing userId or delta", {
               status: 400,
             });
           }
@@ -749,7 +768,7 @@ export default class ChatServer implements Party.Server {
 
           const username = userData?.user_name || "Anonymous";
 
-          await this.updateScore(data.userId, username, data.score);
+          await this.updateScore(data.userId, username, data.delta);
           // No need to broadcast here - the batched update will do it
 
           return new Response(JSON.stringify({ success: true }), {

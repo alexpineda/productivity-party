@@ -18,13 +18,13 @@ import { PARTYKIT_SERVER_URL } from "@/config";
  * Server action that updates the user's score in the PartyKit server.
  * This keeps the leaderboard in sync with the user's productivity score.
  *
- * @param score The new total score to set
+ * @param delta The score delta to apply (will be added to current score)
  * @returns Promise<boolean> indicating success or failure
  *
  * @example
- * const success = await updatePartyKitScore(42);
+ * const success = await updatePartyKitScore(5); // Add 5 points to user's score
  */
-export async function updatePartyKitScore(score: number): Promise<boolean> {
+export async function updatePartyKitScore(delta: number): Promise<boolean> {
   try {
     // Get the PartyKit server URL from config
     const partyKitUrl = PARTYKIT_SERVER_URL;
@@ -49,9 +49,9 @@ export async function updatePartyKitScore(score: number): Promise<boolean> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        type: "set_score",
+        type: "update_score",
         userId,
-        score,
+        delta,
       }),
     });
 

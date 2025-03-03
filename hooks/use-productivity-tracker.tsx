@@ -27,7 +27,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ProductivityBlock } from "@/lib/types/productivity-types";
 import {
   getProductivityData,
@@ -40,100 +40,74 @@ import { usePipeSettings } from "@/hooks/use-pipe-settings";
 import { PipeSettings } from "@/lib/types/settings-types";
 
 /**
- * A convenience hook to unify the entire "pull data -> classify -> score" flow.
- * Not strictly required for the plugin, but helpful for a real-time or interactive UI scenario.
+ * Hook for tracking and displaying productivity data
+ *
+ * This hook fetches productivity data that has been processed by the cron job
+ * and doesn't perform any classification or scoring logic itself.
  */
 export function useProductivityTracker() {
+  const { settings, updateSettings } = usePipeSettings();
   const [blocks, setBlocks] = useState<ProductivityBlock[]>([]);
   const [score, setScore] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const { settings } = usePipeSettings();
 
-  /**
-   * @function classifyAndScoreAllBlocks
-   * @description
-   * Retrieves the last 15 mins of blocks from getProductivityData(),
-   * then calls classifyBlock() for each block, aggregates the final score,
-   * and optionally stores it in user settings using updateUserScore().
-   *
-   * If successful, updates local state with fresh blocks and new total score.
-   *
-   * @param role User's role for classification
-   * @param updateSettings Whether to persist score to settings
-   */
-  async function classifyAndScoreAllBlocks(
-    currentSettings: Partial<PipeSettings>,
-    role: string = "I'm a developer",
-    updateSettings: boolean = true
-  ) {
+  // Load productivity data and score from settings on mount
+  useEffect(() => {
+    if (settings) {
+      setScore(settings.customSettings?.productivityScore || 0);
+      fetchProductivityData();
+    }
+  }, [settings]);
+
+  // Fetch productivity data from the server
+  async function fetchProductivityData(lookbackIntervals: number = 7) {
     setLoading(true);
     setError(null);
 
     try {
-      if (!currentSettings) {
-        throw new Error("No settings found");
-      }
-      // 1. Get settings to retrieve existing data
-      const currentScore = currentSettings?.productivityScore || 0;
-      const lastProcessedBlocks = currentSettings?.lastProcessedBlocks || [];
-
-      // 2. Fetch raw blocks - these may include already processed ones
-      const rawBlocks = await getProductivityData(3);
-
-      // 3. Display the blocks - prioritize showing already processed blocks from settings
-      let displayBlocks: ProductivityBlock[] = [];
-
-      // Add any stored blocks first
-      if (lastProcessedBlocks.length > 0) {
-        displayBlocks = [...lastProcessedBlocks];
-      }
-
-      // Then add any new blocks not already processed
-      for (const block of rawBlocks) {
-        // Skip blocks that are already in displayBlocks (from lastProcessedBlocks)
-        if (!displayBlocks.some((b) => b.id === block.id)) {
-          if (!block.contentSummary || !block.contentSummary.trim()) {
-            block.classification = "break";
-          } else if (!block.processed) {
-            // Only classify unprocessed blocks
-            const result = await classifyBlock(block.contentSummary, role);
-            block.classification = result;
-          }
-          displayBlocks.push(block);
-        }
-      }
-
-      // Keep only the most recent blocks
-      displayBlocks = displayBlocks.slice(-3);
-
-      // Set score directly from settings (already updated by calcscore API)
-      setBlocks(displayBlocks);
-      setScore(currentScore);
-
-      // Only update settings if explicitly requested
-      if (updateSettings) {
-        // Calculate delta from unprocessed blocks
-        const unprocessedBlocks = displayBlocks.filter(
-          (block) => !block.processed
-        );
-        if (unprocessedBlocks.length > 0) {
-          const delta = await aggregateProductivityBlocks(unprocessedBlocks);
-          const newScore = await updateUserScore(
-            delta,
-            true,
-            unprocessedBlocks
-          );
-          setScore(newScore);
-        }
-      }
+      // Fetch the productivity data that has already been processed by the cron job
+      const fetchedBlocks = await getProductivityData(lookbackIntervals);
+      setBlocks(fetchedBlocks);
     } catch (err) {
-      console.error("Failed to classify & score blocks:", err);
+      console.error("Failed to fetch productivity data:", err);
       if (err instanceof Error) {
         console.error(err.stack);
       }
       setError(
-        err instanceof Error ? err.message : "Unknown error in classification"
+        err instanceof Error
+          ? err.message
+          : "Unknown error fetching productivity data"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Force a refresh of productivity data (e.g., after role change)
+  async function refreshProductivityData(lookbackIntervals: number = 7) {
+    // Trigger the cron job to recalculate scores
+    try {
+      setLoading(true);
+      const response = await fetch("/api/calcscore");
+      const data = await response.json();
+
+      if (data.success) {
+        // Once calculation is complete, fetch the updated data
+        await fetchProductivityData(lookbackIntervals);
+        // Update the local score state from the response
+        setScore(data.currentScore);
+      } else {
+        throw new Error(
+          data.message || "Failed to recalculate productivity score"
+        );
+      }
+    } catch (err) {
+      console.error("Failed to refresh productivity data:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unknown error refreshing productivity data"
       );
     } finally {
       setLoading(false);
@@ -145,6 +119,7 @@ export function useProductivityTracker() {
     score,
     loading,
     error,
-    classifyAndScoreAllBlocks,
+    refreshProductivityData,
+    fetchProductivityData,
   };
 }

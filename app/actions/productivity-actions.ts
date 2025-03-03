@@ -1,30 +1,4 @@
-/**
- * @file productivity-actions.ts
- * @description
- * Provides server actions for retrieving recent screen usage data (5-min blocks),
- * chunking text, classifying them, and now (Step 7) calculating a final user score.
- *
- * @exports
- * - getProductivityData(): Returns an array of ProductivityBlock objects from the last 15 minutes
- * - aggregateProductivityBlocks(blocks: ProductivityBlock[]): number
- *   Sums up the classification results for each block, returning a score delta
- * - updateUserScore(scoreDelta: number): Promise<number>
- *   Adds the given delta to the user's existing productivity score stored in
- *   pipe.settings -> customSettings.productivityScore
- *
- * Implementation details:
- * - "productive" => +1 * (activeRatio if any)
- * - "unproductive" => -1 * (activeRatio if any)
- * - "break" => 0
- * - If a block has no classification, default it to "break" or 0 effect
- * - partial blocks can set block.activeRatio < 1
- *
- * This completes the step of "Productivity Score Calculation" by providing
- * aggregator logic and a function to persist the updated score in user settings.
- */
-
 "use server";
-import { pipe } from "@screenpipe/js";
 import type { ProductivityBlock } from "@/lib/types/productivity-types";
 import {
   partitionIntoBlocks,
@@ -41,16 +15,6 @@ import {
   SCREENPIPE_API_URL,
 } from "@/config";
 
-/**
- * Fetch the last 15 minutes of screen usage from Screenpipe (OCR + UI),
- * partition it into 5-minute blocks, chunk text, and return as ProductivityBlock[].
- *
- * This version uses the HTTP API directly instead of the SDK.
- *
- * @param lookBackIntervals Number of intervals to look back (default 3)
- * @returns Promise<ProductivityBlock[]>
- * @throws If screenpipe query fails or if there's a parsing error
- */
 export async function getProductivityData(
   lookBackIntervals: number = 3
 ): Promise<ProductivityBlock[]> {
@@ -98,8 +62,21 @@ export async function getProductivityData(
     // Convert each partitioned block into a ProductivityBlock
     const productivityBlocks: ProductivityBlock[] = partitionedBlocks.map(
       (block) => {
-        // Create a block ID from timestamp
-        const blockId = `block-${block.startTime}`;
+        // Create a normalized block ID based on PRODUCTIVITY_SCORE_UPDATE_INTERVAL
+        // Round the timestamp to the nearest interval to ensure consistent IDs
+        const blockDate = new Date(block.startTime);
+        const minutes = blockDate.getMinutes();
+        const normalizedMinutes =
+          Math.floor(minutes / PRODUCTIVITY_SCORE_UPDATE_INTERVAL) *
+          PRODUCTIVITY_SCORE_UPDATE_INTERVAL;
+
+        // Create a normalized date with minutes aligned to intervals
+        const normalizedDate = new Date(blockDate);
+        normalizedDate.setMinutes(normalizedMinutes, 0, 0); // zero out seconds and milliseconds
+
+        // Format: YYYY-MM-DDTHH:MM
+        const normalizedTimeStr = normalizedDate.toISOString().slice(0, 16);
+        const blockId = `block-${normalizedTimeStr}`;
 
         // Check if this block has already been processed
         const existingBlock = processedBlocks.find(
@@ -196,52 +173,54 @@ export async function aggregateProductivityBlocks(
 /**
  * @function updateUserScore
  * @description
- * Server action that updates the user's stored productivity score by the given amount.
- *
- * The final score is persisted in pipe.settings -> customSettings.pipe.productivityScore.
- * If no previous score exists, we default to 0.
- *
- * @param scoreDelta A positive or negative integer
- * @param persist Whether to save back to settings
- * @param processedBlocks Blocks that were processed in this update
- * @returns The new total user score
- *
- * @example
- * const newScore = await updateUserScore(2); // adds +2
+ * Server action that updates the user's productivity score by sending a delta to the PartyKit server.
+ * Still maintains processed blocks in local settings for deduplication.
  */
 export async function updateUserScore(
   scoreDelta: number,
   persist = true,
   processedBlocks: ProductivityBlock[] = []
-): Promise<number> {
-  // Retrieve the current score using our utility
-  const currentScore = await getPipeSetting("productivityScore", 0);
-  const newScore = currentScore + scoreDelta;
-
+): Promise<void> {
   if (persist) {
-    // Keep only the 3 most recent blocks marked as processed
-    const processedBlocksToStore = processedBlocks
-      .filter((block) => !!block.id)
-      .map((block) => ({
-        ...block,
-        processed: true,
-      }))
-      .slice(-3);
+    // Store newly processed blocks for deduplication purposes
+    if (processedBlocks.length > 0) {
+      const oldProcessedBlocks = await getPipeSetting("processedBlocks", []);
+      const newProcessedBlocks = processedBlocks
+        .filter((block) => !!block.id)
+        .map((block) => ({
+          ...block,
+          processed: true,
+        }));
 
-    // Update settings using our utility
-    await updatePipeSettings({
-      productivityScore: newScore,
-      processedBlocks: processedBlocksToStore,
-    });
+      // Merge them and de-duplicate by block.id
+      const combined = [...oldProcessedBlocks, ...newProcessedBlocks];
+      const dedupedMap = combined.reduce<
+        Record<string, (typeof combined)[number]>
+      >((acc, block) => {
+        if (block.id) {
+          acc[block.id] = block;
+        }
+        return acc;
+      }, {});
+      const dedupedBlocks = Object.values(dedupedMap);
 
-    // Update the PartyKit server directly
+      // Keep the most recent 50 blocks to avoid unlimited growth
+      dedupedBlocks.sort((a, b) => {
+        return new Date(b.startTime).getTime() - new Date(a.startTime).getTime();
+      });
+      const processedBlocksToStore = dedupedBlocks.slice(0, 50);
+
+      // Update only processed blocks in settings, not the score
+      await updatePipeSettings({
+        processedBlocks: processedBlocksToStore,
+      });
+    }
+
+    // Send only the delta to PartyKit server
     try {
-      await updatePartyKitScore(newScore);
+      await updatePartyKitScore(scoreDelta);
     } catch (error) {
-      console.error("Failed to update PartyKit score, but continuing:", error);
-      // Don't fail the whole operation if PartyKit update fails
+      console.error("Failed to update PartyKit score:", error);
     }
   }
-
-  return newScore;
 }
