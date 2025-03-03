@@ -38,7 +38,8 @@ import { usePartyKitClient } from "@/lib/party-kit/party-kit-client";
 import { PipeSettings } from "@/lib/types/settings-types";
 
 export default function ProductivityPage() {
-  const { settings } = usePipeSettings();
+  const { settings, updateSettings } = usePipeSettings();
+  const { updateProfile } = usePartyKitClient();
   const {
     blocks,
     score: localScore,
@@ -49,6 +50,10 @@ export default function ProductivityPage() {
   } = useProductivityTracker();
   const [serverScore, setServerScore] = useState<number | null>(null);
   const [isLoadingScore, setIsLoadingScore] = useState(false);
+  const [currentTask, setCurrentTask] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [showSuccess, setShowSuccess] = useState(false);
 
   // Use server score if available, otherwise fall back to local score
   const displayScore = serverScore !== null ? serverScore : localScore;
@@ -63,7 +68,60 @@ export default function ProductivityPage() {
     
     // Fetch the user's score from the server
     fetchUserScore();
+
+    // Load current task from settings
+    if (settings) {
+      const pipeSettings = settings as PipeSettings;
+      setCurrentTask(pipeSettings.currentTask || "");
+    }
   }, [settings]);
+  
+  /**
+   * onSaveTask
+   * @description Handles form submission to save user's current task
+   * @param e The standard form event
+   */
+  async function onSaveTask(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaving(true);
+    setMessage("");
+    setShowSuccess(false);
+
+    try {
+      // Update both local settings and party server state
+      const updated: Partial<PipeSettings> = {
+        ...settings,
+        currentTask,
+      };
+
+      const success = await updateSettings(updated);
+      if (success) {
+        // Also update the party server state with current profile data
+        const pipeSettings = settings as PipeSettings;
+        updateProfile(
+          pipeSettings.nickname || "", 
+          currentTask, 
+          pipeSettings.role || ""
+        );
+
+        setMessage("Current task updated successfully!");
+        setShowSuccess(true);
+
+        // Hide success message after 3 seconds
+        setTimeout(() => {
+          setShowSuccess(false);
+          setMessage("");
+        }, 3000);
+      } else {
+        setMessage("Failed to update current task.");
+      }
+    } catch (err) {
+      console.error("Error saving current task:", err);
+      setMessage("An error occurred while saving your current task.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // Function to fetch the user's score from the server
   const fetchUserScore = async () => {
@@ -96,6 +154,81 @@ export default function ProductivityPage() {
           productivity score.
         </p>
       </div>
+
+      {/* Current Task Card */}
+      <Card className="shadow-md transition-all hover:shadow-lg mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5 text-blue-500" />
+            Current Task
+          </CardTitle>
+          <CardDescription>What are you working on right now?</CardDescription>
+        </CardHeader>
+        <form onSubmit={onSaveTask}>
+          <CardContent>
+            <div className="space-y-2">
+              <Input
+                value={currentTask}
+                onChange={(e) => setCurrentTask(e.target.value)}
+                placeholder="Enter what you're currently working on..."
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">
+                Setting your current task helps contextualize your productivity
+              </p>
+            </div>
+          </CardContent>
+          <CardFooter className="flex justify-between items-center border-t pt-4">
+            <div className="flex-1">
+              {showSuccess && (
+                <div className="flex items-center text-green-600">
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  <span className="text-sm">{message}</span>
+                </div>
+              )}
+              {message && !showSuccess && (
+                <p className="text-sm text-red-500">{message}</p>
+              )}
+            </div>
+            <Button
+              type="submit"
+              disabled={saving}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            >
+              {saving ? (
+                <span className="flex items-center">
+                  <svg
+                    className="animate-pulse -ml-1 mr-2 h-4 w-4 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Saving...
+                </span>
+              ) : (
+                <span className="flex items-center">
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Task
+                </span>
+              )}
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
 
       {/* Score Card */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -151,7 +284,7 @@ export default function ProductivityPage() {
                   No recent activity recorded
                 </div>
               ) : (
-                blocks.slice(-3).map((block, i) => (
+                blocks.slice(0, 3).map((block, i) => (
                   <div
                     key={i}
                     className="flex flex-col p-2 rounded-lg bg-gray-50 mb-2"

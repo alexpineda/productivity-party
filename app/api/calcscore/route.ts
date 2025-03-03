@@ -6,12 +6,8 @@ import { pipe } from "@screenpipe/js";
 
 /**
  * GET route handler for /api/calcscore
- * 
- * This endpoint is a thin wrapper around the processAndScoreNewBlocks function
- * which handles the entire pipeline of fetching unprocessed blocks, classifying them,
- * calculating score delta, and updating the user's score.
- * 
- * It can be triggered by a cron job or manually by the user.
+ *
+ * Cron job functionality to update scores and store in pipe settings
  */
 export async function GET(request: NextRequest) {
   try {

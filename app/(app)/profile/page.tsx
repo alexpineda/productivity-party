@@ -59,7 +59,6 @@ export default function ProfilePage() {
   const { settings, updateSettings, loading } = usePipeSettings();
   const { updateProfile } = usePartyKitClient();
   const [nickname, setNickname] = useState("");
-  const [currentTask, setCurrentTask] = useState("");
   const [role, setRole] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -68,14 +67,12 @@ export default function ProfilePage() {
   // On first load, set local form states from the stored settings
   useEffect(() => {
     if (!loading && settings) {
-      // If we previously stored the nickname/currentTask in the pipe object
+      // If we previously stored the nickname/role in the pipe object
       const pipeSettings = settings as PipeSettings;
       const storedNickname = pipeSettings.nickname || "";
-      const storedTask = pipeSettings.currentTask || "";
       const storedRole = pipeSettings.role || "";
 
       setNickname(storedNickname);
-      setCurrentTask(storedTask);
       setRole(storedRole);
     }
   }, [loading, settings]);
@@ -96,14 +93,15 @@ export default function ProfilePage() {
       const updated: Partial<PipeSettings> = {
         ...settings,
         nickname,
-        currentTask,
         role,
       };
 
       const success = await updateSettings(updated);
       if (success) {
         // Also update the party server state
-        updateProfile(nickname, currentTask, role);
+        // Get current task from settings since we no longer track it on this page
+        const pipeSettings = settings as PipeSettings;
+        updateProfile(nickname, pipeSettings.currentTask || "", role);
 
         setMessage("Profile updated successfully!");
         setShowSuccess(true);
@@ -182,7 +180,9 @@ export default function ProfilePage() {
               <h3 className="text-xl font-medium">{nickname || "Anonymous"}</h3>
               <p className="text-sm text-gray-500">{role || "No role set"}</p>
               <p className="text-xs text-gray-400 mt-1">
-                {currentTask || "No current task set"}
+                {settings && (settings as PipeSettings).currentTask
+                  ? (settings as PipeSettings).currentTask
+                  : "No current task set"}
               </p>
             </div>
           </CardContent>
@@ -230,22 +230,6 @@ export default function ProfilePage() {
                 />
                 <p className="text-xs text-gray-500">
                   Your professional role or title
-                </p>
-              </div>
-
-              {/* Current Task */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Current Task
-                </label>
-                <Input
-                  value={currentTask}
-                  onChange={(e) => setCurrentTask(e.target.value)}
-                  placeholder="What are you working on?"
-                  className="w-full"
-                />
-                <p className="text-xs text-gray-500">
-                  Let others know what you&apos;re currently focused on
                 </p>
               </div>
             </CardContent>

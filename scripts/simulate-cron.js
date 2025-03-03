@@ -5,7 +5,7 @@
 
 const http = require("http");
 
-const PRODUCTIVITY_SCORE_UPDATE_INTERVAL = 1;
+const PRODUCTIVITY_SCORE_UPDATE_INTERVAL = 5;
 // Convert minutes to milliseconds
 const INTERVAL_MS = PRODUCTIVITY_SCORE_UPDATE_INTERVAL * 60 * 1000;
 const API_URL = "http://localhost:3000/api/calcscore";
