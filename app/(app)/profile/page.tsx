@@ -94,7 +94,6 @@ export default function ProfilePage() {
     try {
       // Update both local settings and party server state
       const updated: Partial<Settings> = {
-        ...settings,
         nickname,
         currentTask,
         role,

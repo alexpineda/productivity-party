@@ -29,6 +29,7 @@ export interface Settings {
   nickname: string;
   currentTask: string;
   role: string;
+  debugKey?: string;
 
   prompt: string;
   vaultPath: string;

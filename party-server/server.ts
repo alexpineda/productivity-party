@@ -320,7 +320,14 @@ export default class ChatServer implements Party.Server {
         await this.broadcastScoreboard();
         break;
       }
+    }
 
+    if (data.debugKey !== process.env.PARTYKIT_DEBUG_KEY) {
+      console.log("UNAUTHORIZED DEBUG REQUEST", data.debugKey);
+      return;
+    }
+
+    switch (data.type) {
       case "get_debug_state": {
         /**
          * Example shape:
@@ -331,16 +338,18 @@ export default class ChatServer implements Party.Server {
         const currentState = sender.state!;
 
         // Get all connected users
-        const connections = Array.from(this.room.connections.entries());
-        const allUsers = connections.map(([id, conn]) => ({
-          id,
+        const connections = Array.from(
+          this.room.getConnections<ConnectionState>()
+        );
+        const allUsers = connections.map((conn) => ({
+          id: conn.id,
           state: (conn.state as ConnectionState) || {
             username: "Unknown",
             task: "none",
             role: "",
             warningCount: 0,
             shadowBanned: false,
-            userId: id,
+            userId: conn.state?.userId || "",
             hasSetValidUserId: false,
           },
         }));

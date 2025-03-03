@@ -131,7 +131,12 @@ export function usePartyKitClient() {
    */
   function getDebugState() {
     if (!socket) return;
-    socket.send(JSON.stringify({ type: "get_debug_state" }));
+    socket.send(
+      JSON.stringify({
+        type: "get_debug_state",
+        debugKey: settings?.debugKey,
+      })
+    );
   }
 
   /**
@@ -140,7 +145,12 @@ export function usePartyKitClient() {
    */
   function clearMessages() {
     if (!socket) return;
-    socket.send(JSON.stringify({ type: "clear_messages" }));
+    socket.send(
+      JSON.stringify({
+        type: "clear_messages",
+        debugKey: settings?.debugKey,
+      })
+    );
   }
 
   /**
@@ -149,7 +159,12 @@ export function usePartyKitClient() {
    */
   function clearLeaderboard() {
     if (!socket) return;
-    socket.send(JSON.stringify({ type: "clear_leaderboard" }));
+    socket.send(
+      JSON.stringify({
+        type: "clear_leaderboard",
+        debugKey: settings?.debugKey,
+      })
+    );
   }
 
   return {

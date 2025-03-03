@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { usePipeSettings } from "@/hooks/use-pipe-settings";
 
 // User state in the PartyKit server
 interface ConnectionState {
@@ -61,6 +62,7 @@ export function DebugState() {
   const [loading, setLoading] = useState(false);
   const [clearingMessages, setClearingMessages] = useState(false);
   const [clearingLeaderboard, setClearingLeaderboard] = useState(false);
+  const { settings, updateSettings } = usePipeSettings();
 
   // Get user ID from settings
   useEffect(() => {
@@ -123,7 +125,7 @@ export function DebugState() {
       if (loading) {
         setLoading(false);
       }
-    }, 5000);
+    }, 2000);
   };
 
   const handleClearMessages = () => {
@@ -142,6 +144,12 @@ export function DebugState() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">PartyKit Debug State</h2>
+        <input
+          className="border border-gray-300 rounded-md p-2"
+          type="text"
+          value={settings?.debugKey}
+          onChange={(e) => updateSettings({ debugKey: e.target.value })}
+        />
         <Button onClick={handleRequestDebugState} disabled={!socket || loading}>
           {loading ? "Loading..." : "Request Debug State"}
         </Button>
