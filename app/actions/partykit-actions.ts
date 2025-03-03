@@ -26,9 +26,8 @@ import { PARTYKIT_SERVER_URL } from "@/config";
  */
 export async function updatePartyKitScore(score: number): Promise<boolean> {
   try {
-    // Get the PartyKit host from environment or use localhost for development
-    const isDev = process.env.NODE_ENV !== "production";
-    const host = PARTYKIT_SERVER_URL;
+    // Get the PartyKit server URL from config
+    const partyKitUrl = PARTYKIT_SERVER_URL;
 
     // Get the user's settings to retrieve their user ID
     const settings = await pipe.settings.getAll();
@@ -40,8 +39,8 @@ export async function updatePartyKitScore(score: number): Promise<boolean> {
     }
 
     // Construct the URL for the PartyKit server
-    const protocol = isDev ? "http" : "https";
-    const url = `${protocol}://${host}/party/chat`;
+    // The URL in config already includes the protocol
+    const url = `${partyKitUrl}/party/chat`;
 
     // Send a POST request to the PartyKit server
     const response = await fetch(url, {

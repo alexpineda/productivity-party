@@ -10,3 +10,4 @@ export * from "./chat-types";
 export * from "./user-types";
 export * from "./scoreboard-types";
 export * from "./productivity-types";
+export * from "./settings-types";

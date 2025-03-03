@@ -12,7 +12,7 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 
-export class TTLCache<T> {
+export class TTLKeyedCache<T> {
   private cache: Map<string, CacheEntry<T>>;
   private ttlMs: number;
 

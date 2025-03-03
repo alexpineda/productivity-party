@@ -33,6 +33,10 @@ import {
 import { updatePartyKitScore } from "./partykit-actions";
 import { appendToLog } from "@/lib/utilities/log-utils";
 import {
+  getPipeSetting,
+  updatePipeSettings,
+} from "@/lib/utilities/settings-utils";
+import {
   PRODUCTIVITY_SCORE_UPDATE_INTERVAL,
   SCREENPIPE_API_URL,
 } from "@/config";
@@ -43,18 +47,27 @@ import {
  *
  * This version uses the HTTP API directly instead of the SDK.
  *
+ * @param lookBackIntervals Number of intervals to look back (default 3)
  * @returns Promise<ProductivityBlock[]>
  * @throws If screenpipe query fails or if there's a parsing error
  */
-export async function getProductivityData(): Promise<ProductivityBlock[]> {
+export async function getProductivityData(
+  lookBackIntervals: number = 3
+): Promise<ProductivityBlock[]> {
   const now = new Date();
   const timeRangeAgo = new Date(
-    now.getTime() - PRODUCTIVITY_SCORE_UPDATE_INTERVAL * 60 * 1000
+    now.getTime() -
+      PRODUCTIVITY_SCORE_UPDATE_INTERVAL * lookBackIntervals * 60 * 1000
   );
 
-  appendToLog("getProductivityData: using HTTP API");
+  appendToLog(
+    `getProductivityData: using HTTP API, looking back ${lookBackIntervals} intervals`
+  );
 
   try {
+    // Get last processed blocks from settings using the utility
+    const processedBlocks = await getPipeSetting("processedBlocks", []);
+
     // Query screenpipe's /search endpoint directly
     const searchParams = new URLSearchParams({
       content_type: "ocr",
@@ -85,6 +98,22 @@ export async function getProductivityData(): Promise<ProductivityBlock[]> {
     // Convert each partitioned block into a ProductivityBlock
     const productivityBlocks: ProductivityBlock[] = partitionedBlocks.map(
       (block) => {
+        // Create a block ID from timestamp
+        const blockId = `block-${block.startTime}`;
+
+        // Check if this block has already been processed
+        const existingBlock = processedBlocks.find(
+          (b: any) => b.id === blockId
+        );
+
+        // If this block has already been processed, return the existing block
+        if (existingBlock) {
+          return {
+            ...existingBlock,
+            processed: true,
+          };
+        }
+
         // Combine all text from OCR or UI
         let combinedText = "";
         block.items.forEach((item) => {
@@ -103,6 +132,7 @@ export async function getProductivityData(): Promise<ProductivityBlock[]> {
         const contentSummary = chunkedArray.join("\n---\n");
 
         return {
+          id: blockId,
           startTime: block.startTime,
           endTime: block.endTime,
           contentSummary,
@@ -111,6 +141,7 @@ export async function getProductivityData(): Promise<ProductivityBlock[]> {
           // We assume 100% active ratio for demonstration
           activeRatio: 1,
           aiDescription: "",
+          processed: false,
         } satisfies ProductivityBlock;
       }
     );
@@ -167,10 +198,12 @@ export async function aggregateProductivityBlocks(
  * @description
  * Server action that updates the user's stored productivity score by the given amount.
  *
- * The final score is persisted in pipe.settings -> customSettings.productivityScore.
+ * The final score is persisted in pipe.settings -> customSettings.pipe.productivityScore.
  * If no previous score exists, we default to 0.
  *
  * @param scoreDelta A positive or negative integer
+ * @param persist Whether to save back to settings
+ * @param processedBlocks Blocks that were processed in this update
  * @returns The new total user score
  *
  * @example
@@ -178,30 +211,36 @@ export async function aggregateProductivityBlocks(
  */
 export async function updateUserScore(
   scoreDelta: number,
-  persist = true
+  persist = true,
+  processedBlocks: ProductivityBlock[] = []
 ): Promise<number> {
-  // Retrieve the current settings
-  const curSettings = await pipe.settings.getAll();
-
-  // If there's a stored customScore, otherwise default to 0
-  const currentScore =
-    curSettings.customSettings?.productivityScore !== undefined
-      ? Number(curSettings.customSettings.productivityScore)
-      : 0;
-
+  // Retrieve the current score using our utility
+  const currentScore = await getPipeSetting("productivityScore", 0);
   const newScore = currentScore + scoreDelta;
 
   if (persist) {
-    // Save it back
-    await pipe.settings.update({
-      customSettings: {
-        ...curSettings.customSettings,
-        productivityScore: newScore,
-      },
+    // Keep only the 3 most recent blocks marked as processed
+    const processedBlocksToStore = processedBlocks
+      .filter((block) => !!block.id)
+      .map((block) => ({
+        ...block,
+        processed: true,
+      }))
+      .slice(-3);
+
+    // Update settings using our utility
+    await updatePipeSettings({
+      productivityScore: newScore,
+      processedBlocks: processedBlocksToStore,
     });
 
     // Update the PartyKit server directly
-    await updatePartyKitScore(newScore);
+    try {
+      await updatePartyKitScore(newScore);
+    } catch (error) {
+      console.error("Failed to update PartyKit score, but continuing:", error);
+      // Don't fail the whole operation if PartyKit update fails
+    }
   }
 
   return newScore;

@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { Settings } from "@/lib/types";
+import { PipeSettings } from "@/lib/types/settings-types";
 import {
   getScreenpipeAppSettings,
   updateScreenpipeAppSettings,
 } from "@/lib/actions/get-screenpipe-app-settings";
 
 export function usePipeSettings() {
-  const [settings, setSettings] = useState<Partial<Settings> | null>(null);
+  const [settings, setSettings] = useState<Partial<PipeSettings> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function usePipeSettings() {
     }
   };
 
-  const updateSettings = async (newSettings: Partial<Settings>) => {
+  const updateSettings = async (newSettings: Partial<PipeSettings>) => {
     try {
       // Split settings
       const { screenpipeAppSettings, ...pipeSettings } = newSettings;

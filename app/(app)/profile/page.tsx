@@ -37,7 +37,6 @@ import { usePipeSettings } from "@/hooks/use-pipe-settings";
 import { usePartyKitClient } from "@/lib/party-kit/party-kit-client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Settings } from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -48,6 +47,7 @@ import {
 } from "@/components/ui/card";
 import { User, Briefcase, Save, CheckCircle, UserCircle2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { PipeSettings } from "@/lib/types/settings-types";
 
 /**
  * ProfilePage
@@ -69,7 +69,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!loading && settings) {
       // If we previously stored the nickname/currentTask in the pipe object
-      const pipeSettings = settings as Settings;
+      const pipeSettings = settings as PipeSettings;
       const storedNickname = pipeSettings.nickname || "";
       const storedTask = pipeSettings.currentTask || "";
       const storedRole = pipeSettings.role || "";
@@ -93,7 +93,8 @@ export default function ProfilePage() {
 
     try {
       // Update both local settings and party server state
-      const updated: Partial<Settings> = {
+      const updated: Partial<PipeSettings> = {
+        ...settings,
         nickname,
         currentTask,
         role,

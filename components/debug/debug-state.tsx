@@ -148,7 +148,9 @@ export function DebugState() {
           className="border border-gray-300 rounded-md p-2"
           type="text"
           value={settings?.debugKey}
-          onChange={(e) => updateSettings({ debugKey: e.target.value })}
+          onChange={(e) =>
+            updateSettings({ ...settings, debugKey: e.target.value })
+          }
         />
         <Button onClick={handleRequestDebugState} disabled={!socket || loading}>
           {loading ? "Loading..." : "Request Debug State"}

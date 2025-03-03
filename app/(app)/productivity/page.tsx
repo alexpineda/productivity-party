@@ -35,7 +35,21 @@ export default function ProductivityPage() {
 
   useEffect(() => {
     if (!settings) return;
-    classifyAndScoreAllBlocks(settings.role ?? "I'm a developer");
+
+    // Trigger the cron job API endpoint to ensure up-to-date score
+    fetch("/api/calcscore")
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Score updated from cron job:", data);
+      })
+      .catch((err) => console.error("Error running calcscore:", err));
+
+    // For live UI, load the blocks for display
+    classifyAndScoreAllBlocks(
+      settings,
+      settings.role ?? "I'm a developer",
+      false
+    );
   }, [settings]);
 
   return (
@@ -67,14 +81,24 @@ export default function ProductivityPage() {
                 {score}
               </div>
               <Progress value={Math.min(100, Math.max(0, score))} />
-              <Button
-                onClick={() => classifyAndScoreAllBlocks()}
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-              >
-                <RefreshCcw className="mr-2 h-4 w-4" />
-                Refresh Score
-              </Button>
+              {process.env.NODE_ENV === "development" && (
+                <Button
+                  onClick={() => {
+                    // Only for debug purposes
+                    fetch("/api/calcscore")
+                      .then((response) => response.json())
+                      .then((data) => {
+                        console.log("Debug refresh:", data);
+                        window.location.reload();
+                      });
+                  }}
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                >
+                  <RefreshCcw className="mr-2 h-4 w-4" />
+                  Debug Refresh
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

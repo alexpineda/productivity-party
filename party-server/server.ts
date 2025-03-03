@@ -1,41 +1,12 @@
 /**
- * @file server.ts
- * @description
- * The PartyKit server code for real-time chat and ephemeral scoreboard management,
- * now enhanced with OpenAI moderation. Each user can be shadow banned after
- * multiple flagged messages.
- *
- * Key Features:
- * 1. Real-time Chat:
- *    - onMessage with type="chat" calls `moderateMessage` to check content
- *    - If flagged => discard; increment warningCount
- *    - If user hits 3 flagged messages => set shadowBanned=true
- *    - Shadow banned users can see their own messages but no one else can see them
- * 2. Global Scoreboard:
- *    - "set_score" message updates ephemeral scoreboard and broadcasts
- *    - scoreboard is stored in room.storage, ephemeral
- * 3. ephemeral ConnectionState:
- *    - username: string
- *    - task: string
- *    - role: string
- *    - warningCount: number (times they've posted flagged content)
- *    - shadowBanned: boolean (true if they've exceeded flagged content threshold)
- *
- * Usage:
- *  - Deployed via `partykit dev` or `partykit deploy`
- *  - Client uses party-kit/party-kit-client.ts to connect
- *
- * @notes
- * - This step is a partial example. If you need persistent bans across restarts,
- *   store them in a real DB. Right now it's ephemeral.
- * - We do not automatically notify the user they've been banned beyond
- *   their messages not appearing. This can be improved if desired.
+ * This partykit server runs on a edge worker (workerd)
+ * We use a different set of api keys since we're not using the client side settings.
  */
 
 import type * as Party from "partykit/server";
 import { moderateMessage } from "@/app/actions/moderation";
 import { createServiceClient } from "./supabase-service-client";
-import { TTLCache } from "./utils/ttl-cache";
+import { TTLKeyedCache } from "./utils/ttl-cache";
 
 // Basic chat message structure
 interface ChatMessageStorage {
@@ -87,10 +58,57 @@ const MAX_WARNINGS = 3;
  * message moderation with repeated flags => shadow ban.
  */
 export default class ChatServer implements Party.Server {
-  private bannedChatCache: TTLCache<boolean>;
+  private bannedChatCache: TTLKeyedCache<boolean>;
+  private scoreUpdateQueue: Map<
+    string,
+    { username: string; score: number; timestamp: number }
+  >;
+  private scoreUpdateTimer: NodeJS.Timeout | null = null;
+  private readonly SCORE_UPDATE_INTERVAL = 5000;
+  private messageRateLimits: Map<string, number[]>; // User ID -> timestamps of recent messages
+  private readonly MAX_MESSAGES_PER_MINUTE = 20;
+  private readonly RATE_LIMIT_WINDOW_MS = 60000;
+  private isShuttingDown = false;
+  private scoreboardCache: ScoreboardEntry[] | null = null;
+  private scoreboardCacheExpiry: number = 0;
+  private readonly SCOREBOARD_CACHE_TTL = 60000; // 1 minute cache TTL
+  private readonly BANNED_CHAT_CACHE_TTL = 60000; // 1 minute cache TTL
 
   constructor(public room: Party.Room) {
-    this.bannedChatCache = new TTLCache<boolean>();
+    this.bannedChatCache = new TTLKeyedCache<boolean>(
+      this.BANNED_CHAT_CACHE_TTL
+    );
+
+    // Init score update batch queue
+    this.scoreUpdateQueue = new Map();
+
+    // Init message rate limiter
+    this.messageRateLimits = new Map();
+
+    // No process.on here - Cloudflare Workers don't have a Node.js process object
+  }
+
+  /**
+   * Cleanup resources before server shutdown
+   */
+  private async cleanup() {
+    // Prevent new messages during shutdown
+    this.isShuttingDown = true;
+
+    // Process any pending score updates
+    if (this.scoreUpdateQueue.size > 0 && this.scoreUpdateTimer) {
+      clearTimeout(this.scoreUpdateTimer);
+      await this.processBatchScoreUpdates();
+    }
+
+    // Notify clients if needed
+    const shutdownMsg: ChatMessageStorage = {
+      type: "chat",
+      from: "System",
+      text: "Server is shutting down for maintenance. Please reconnect in a few minutes.",
+      timestamp: Date.now(),
+    };
+    this.room.broadcast(JSON.stringify(shutdownMsg));
   }
 
   /**
@@ -124,6 +142,46 @@ export default class ChatServer implements Party.Server {
   }
 
   /**
+   * onDisconnect
+   * Called when a user disconnects from the PartyKit room.
+   * We'll send a system message to notify others and clean up any resources.
+   */
+  async onDisconnect(connection: Party.Connection<ConnectionState>) {
+    // Get the disconnected user's state
+    const state = connection.state;
+    if (!state || !state.hasSetValidUserId) return;
+
+    // Optional: Notify other users that someone left
+    const systemMsg: ChatMessageStorage = {
+      type: "chat",
+      from: "System",
+      text: `${state.username} has left the chat.`,
+      timestamp: Date.now(),
+    };
+
+    // Get existing messages
+    const messages =
+      (await this.room.storage.get<ChatMessageStorage[]>("messages")) ?? [];
+
+    // Add system message about user leaving
+    messages.unshift(systemMsg);
+
+    // Prune if needed
+    if (messages.length > MAX_MESSAGES) {
+      messages.length = MAX_MESSAGES;
+    }
+
+    // Save and broadcast
+    await this.room.storage.put("messages", messages);
+    this.room.broadcast(JSON.stringify(systemMsg));
+
+    // Force process any pending score updates for this user before they disconnect
+    if (this.scoreUpdateQueue.has(state.userId)) {
+      await this.processBatchScoreUpdates();
+    }
+  }
+
+  /**
    * Helper method to check if a connection has a valid userId set via hello message
    */
   private hasValidUserId(
@@ -137,20 +195,41 @@ export default class ChatServer implements Party.Server {
   }
 
   private async getScoreboard(): Promise<ScoreboardEntry[]> {
-    const db = await createServiceClient();
-    const { data, error } = await db
-      .from("scoreboard")
-      .select("*")
-      .eq("month", this.getCurrentMonth())
-      .order("score", { ascending: false })
-      .limit(100);
+    const now = Date.now();
 
-    if (error) {
-      console.error("Error fetching scoreboard:", error);
+    // Return cached result if valid
+    if (this.scoreboardCache && now < this.scoreboardCacheExpiry) {
+      return this.scoreboardCache;
+    }
+
+    // Otherwise fetch from database
+    const db = await createServiceClient();
+    const month = this.getCurrentMonth();
+
+    const { data } = await db
+      .from("scoreboard")
+      .select("user_id, user_name, score, month, region")
+      .eq("month", month)
+      .order("score", { ascending: false });
+
+    if (!data) {
       return [];
     }
 
-    return data;
+    // Map to the correct types
+    const typedData: ScoreboardEntry[] = data.map((item) => ({
+      user_id: item.user_id,
+      user_name: item.user_name,
+      score: item.score,
+      month: item.month,
+      region: item.region || "global",
+    }));
+
+    // Update cache
+    this.scoreboardCache = typedData;
+    this.scoreboardCacheExpiry = now + this.SCOREBOARD_CACHE_TTL;
+
+    return typedData;
   }
 
   private async updateScore(
@@ -158,41 +237,75 @@ export default class ChatServer implements Party.Server {
     username: string,
     newScore: number
   ) {
-    const db = await createServiceClient();
-    const month = this.getCurrentMonth();
+    // Queue the score update
+    this.scoreUpdateQueue.set(userId, {
+      username,
+      score: newScore,
+      timestamp: Date.now(),
+    });
 
-    // First check if user is banned
-    const { data: bannedData } = await db
-      .from("banned")
-      .select("banned_score_reason")
-      .eq("user_id", userId)
-      .single();
-
-    if (bannedData?.banned_score_reason) {
-      console.log("Banned user attempted to update score:", userId);
-      return false;
-    }
-
-    // Upsert the score
-    const { error } = await db.from("scoreboard").upsert(
-      {
-        user_id: userId,
-        user_name: username,
-        score: newScore,
-        month,
-        region: "global", // You can make this configurable if needed
-      },
-      {
-        onConflict: "user_id,month",
-      }
-    );
-
-    if (error) {
-      console.error("Error updating score:", error);
-      return false;
+    // Start the timer if not already running
+    if (!this.scoreUpdateTimer) {
+      this.scoreUpdateTimer = setTimeout(
+        () => this.processBatchScoreUpdates(),
+        this.SCORE_UPDATE_INTERVAL
+      );
     }
 
     return true;
+  }
+
+  private async processBatchScoreUpdates() {
+    // Clear the timer
+    this.scoreUpdateTimer = null;
+
+    // If queue is empty, do nothing
+    if (this.scoreUpdateQueue.size === 0) return;
+
+    const db = await createServiceClient();
+    const month = this.getCurrentMonth();
+    const updates = Array.from(this.scoreUpdateQueue.entries());
+
+    // Clear the queue
+    this.scoreUpdateQueue.clear();
+
+    // Invalidate scoreboard cache since we're updating scores
+    this.scoreboardCache = null;
+    this.scoreboardCacheExpiry = 0;
+
+    // First filter out banned users
+    const userIds = updates.map(([userId]) => userId);
+    const { data: bannedUsers } = await db
+      .from("banned")
+      .select("user_id, banned_score_reason")
+      .in("user_id", userIds);
+
+    const bannedUserIds = new Set(bannedUsers?.map((u) => u.user_id) || []);
+
+    // Prepare upsert data for non-banned users
+    const upsertData = updates
+      .filter(([userId]) => !bannedUserIds.has(userId))
+      .map(([userId, data]) => ({
+        user_id: userId,
+        user_name: data.username,
+        score: data.score,
+        month,
+        region: "global",
+      }));
+
+    if (upsertData.length === 0) return;
+
+    // Perform the batch upsert
+    const { error } = await db.from("scoreboard").upsert(upsertData, {
+      onConflict: "user_id,month",
+    });
+
+    if (error) {
+      console.error("Error batch updating scores:", error);
+    }
+
+    // Broadcast updated scoreboard
+    await this.broadcastScoreboard();
   }
 
   private async isUserBanned(userId: string): Promise<boolean> {
@@ -218,6 +331,37 @@ export default class ChatServer implements Party.Server {
   }
 
   /**
+   * Check if a user is rate limited
+   * @param userId The user's ID
+   * @returns true if rate limited, false otherwise
+   */
+  private isRateLimited(userId: string): boolean {
+    const now = Date.now();
+    const userMessages = this.messageRateLimits.get(userId) || [];
+
+    // Filter out messages older than our window
+    const recentMessages = userMessages.filter(
+      (timestamp) => now - timestamp < this.RATE_LIMIT_WINDOW_MS
+    );
+
+    // Update the stored timestamps
+    this.messageRateLimits.set(userId, recentMessages);
+
+    // Check if they've sent too many messages
+    return recentMessages.length >= this.MAX_MESSAGES_PER_MINUTE;
+  }
+
+  /**
+   * Record a message from a user for rate limiting
+   * @param userId The user's ID
+   */
+  private recordMessage(userId: string): void {
+    const userMessages = this.messageRateLimits.get(userId) || [];
+    userMessages.push(Date.now());
+    this.messageRateLimits.set(userId, userMessages);
+  }
+
+  /**
    * onMessage
    * Called when a user sends a message. We parse JSON, then handle it
    * based on its 'type'.
@@ -231,6 +375,19 @@ export default class ChatServer implements Party.Server {
    * - "clear_leaderboard": clears the leaderboard/scoreboard
    */
   async onMessage(raw: string, sender: Party.Connection<ConnectionState>) {
+    // If server is shutting down, reject all messages
+    if (this.isShuttingDown) {
+      sender.send(
+        JSON.stringify({
+          type: "error",
+          message:
+            "Server is shutting down. Please reconnect in a few minutes.",
+          timestamp: Date.now(),
+        })
+      );
+      return;
+    }
+
     let data: any;
     try {
       data = JSON.parse(raw);
@@ -254,6 +411,9 @@ export default class ChatServer implements Party.Server {
         sender.setState({
           ...currentState,
           userId: data.userId,
+          username: data.nickname || currentState.username,
+          task: data.currentTask || currentState.task,
+          role: data.role || currentState.role,
           hasSetValidUserId: true,
         });
       }
@@ -300,12 +460,46 @@ export default class ChatServer implements Party.Server {
       }
 
       case "chat": {
+        /**
+         * Example shape:
+         * { type: "chat", text: "Hello, world!" }
+         *
+         * We'll transform this to store sender's username, then
+         * store and broadcast.
+         */
+
+        // First check if user is banned
         const currentState = sender.state!;
         const { username, warningCount } = currentState;
         const text = data.text || "";
 
-        // Check if user is banned from the database
         const isBanned = await this.isUserBanned(currentState.userId);
+        if (isBanned) {
+          sender.send(
+            JSON.stringify({
+              type: "error",
+              message: "You are banned from chat",
+              timestamp: Date.now(),
+            })
+          );
+          return;
+        }
+
+        // Check for rate limiting
+        if (this.isRateLimited(currentState.userId)) {
+          sender.send(
+            JSON.stringify({
+              type: "error",
+              message:
+                "You are sending messages too quickly. Please wait a moment.",
+              timestamp: Date.now(),
+            })
+          );
+          return;
+        }
+
+        // Record this message for rate limiting
+        this.recordMessage(currentState.userId);
 
         // Create the new ChatMessage
         const newMessage: ChatMessageStorage = {
@@ -314,12 +508,6 @@ export default class ChatServer implements Party.Server {
           text,
           timestamp: Date.now(),
         };
-
-        // If banned, only send back to user themself
-        if (isBanned) {
-          sender.send(JSON.stringify(newMessage));
-          return;
-        }
 
         // Otherwise we do moderation
         const flagged = await moderateMessage(text);
@@ -347,10 +535,10 @@ export default class ChatServer implements Party.Server {
         // If not flagged => store + broadcast
         const messages =
           (await this.room.storage.get<ChatMessageStorage[]>("messages")) ?? [];
-        messages.push(newMessage);
-        // prune older messages
+        messages.unshift(newMessage);
+        // Only keep the most recent MAX_MESSAGES
         if (messages.length > MAX_MESSAGES) {
-          messages.splice(0, messages.length - MAX_MESSAGES);
+          messages.length = MAX_MESSAGES;
         }
         await this.room.storage.put("messages", messages);
 
@@ -371,13 +559,15 @@ export default class ChatServer implements Party.Server {
         const newScore = typeof data.score === "number" ? data.score : 0;
 
         await this.updateScore(userId, currentState.username, newScore);
-        await this.broadcastScoreboard();
+        // No need to broadcast here - the batched update will do it
         break;
       }
     }
 
-    if (data.debugKey !== process.env.PARTYKIT_DEBUG_KEY) {
-      console.log("UNAUTHORIZED DEBUG REQUEST", data.debugKey);
+    // Check for debug key but without using process.env which isn't available in Cloudflare Workers
+    const debugKey = this.room.env?.PARTYKIT_DEBUG_KEY;
+    if (data.debugKey !== debugKey) {
+      console.log("UNAUTHORIZED DEBUG REQUEST");
       return;
     }
 
@@ -480,9 +670,17 @@ export default class ChatServer implements Party.Server {
    */
   private async broadcastScoreboard() {
     const scoreboard = await this.getScoreboard();
+    // Transform property names to match client expectations
+    const clientScoreboard = scoreboard.map((entry) => ({
+      userId: entry.user_id,
+      username: entry.user_name,
+      score: entry.score,
+      month: entry.month,
+      region: entry.region,
+    }));
     const msg = {
       type: "scoreboard",
-      scoreboard,
+      scoreboard: clientScoreboard,
     };
     this.room.broadcast(JSON.stringify(msg));
   }
@@ -495,9 +693,17 @@ export default class ChatServer implements Party.Server {
     connection: Party.Connection<ConnectionState>
   ) {
     const scoreboard = await this.getScoreboard();
+    // Transform property names to match client expectations
+    const clientScoreboard = scoreboard.map((entry) => ({
+      userId: entry.user_id,
+      username: entry.user_name,
+      score: entry.score,
+      month: entry.month,
+      region: entry.region,
+    }));
     const msg = {
       type: "scoreboard",
-      scoreboard,
+      scoreboard: clientScoreboard,
     };
     connection.send(JSON.stringify(msg));
   }
@@ -544,7 +750,7 @@ export default class ChatServer implements Party.Server {
           const username = userData?.user_name || "Anonymous";
 
           await this.updateScore(data.userId, username, data.score);
-          await this.broadcastScoreboard();
+          // No need to broadcast here - the batched update will do it
 
           return new Response(JSON.stringify({ success: true }), {
             status: 200,

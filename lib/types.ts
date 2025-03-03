@@ -1,4 +1,5 @@
 import type { Settings as ScreenpipeAppSettings } from "@screenpipe/js";
+import { ProductivityBlock } from "./types/productivity-types";
 
 export interface WorkLog {
   title: string;
@@ -23,21 +24,4 @@ export interface Intelligence {
     followUps: string[];
     opportunities: string[];
   };
-}
-
-export interface Settings {
-  nickname: string;
-  currentTask: string;
-  role: string;
-  debugKey?: string;
-
-  prompt: string;
-  vaultPath: string;
-  logTimeWindow: number;
-  logPageSize: number;
-  logModel: string;
-  analysisModel: string;
-  analysisTimeWindow: number;
-  deduplicationEnabled: boolean;
-  screenpipeAppSettings: ScreenpipeAppSettings;
 }

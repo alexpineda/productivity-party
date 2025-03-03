@@ -62,16 +62,26 @@ export async function GET(request: NextRequest) {
     const settings = await pipe.settings.getAll();
     const userRole = settings.customSettings?.pipe?.role || "I'm a developer"; // Default to developer if no role set
 
-    // 1. Pull raw blocks for the last ~15 mins
-    // Use mock data for testing instead of the real function
-    const blocks = await getProductivityData();
+    // 1. Pull raw blocks for the last 3 intervals (looking back)
+    const blocks = await getProductivityData(3);
     // const blocks = await getMockProductivityData();
 
-    appendToLog(blocks);
-    // 2. Classify each block (if not already classified)
-    //    This might be done individually, or you might do it in getProductivityData,
-    //    depending on how you structured your code.
-    for (const block of blocks) {
+    // Only process blocks that haven't been processed yet
+    const unprocessedBlocks = blocks.filter(block => !block.processed);
+    
+    if (unprocessedBlocks.length === 0) {
+      appendToLog("No unprocessed blocks found");
+      return NextResponse.json({ 
+        success: true, 
+        message: "No new blocks to process",
+        currentScore: settings.customSettings?.productivityScore || 0 
+      });
+    }
+
+    appendToLog(`Processing ${unprocessedBlocks.length} unprocessed blocks`);
+    
+    // 2. Classify each unprocessed block
+    for (const block of unprocessedBlocks) {
       if (!block.contentSummary?.trim()) {
         block.classification = "break";
         continue;
@@ -82,14 +92,24 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Aggregate to get a score delta
-    const scoreDelta = await aggregateProductivityBlocks(blocks);
+    const scoreDelta = await aggregateProductivityBlocks(unprocessedBlocks);
 
-    // 4. Update user's total score
-    const newScore = await updateUserScore(scoreDelta);
+    // 4. Update user's total score and store processed blocks
+    const newScore = await updateUserScore(scoreDelta, true, unprocessedBlocks);
 
-    appendToLog({ scoreDelta, newScore });
+    appendToLog({ 
+      scoreDelta, 
+      newScore, 
+      processedBlockCount: unprocessedBlocks.length
+    });
 
-    return NextResponse.json({ success: true, scoreDelta, newScore });
+    return NextResponse.json({ 
+      success: true, 
+      scoreDelta, 
+      newScore,
+      processedBlockCount: unprocessedBlocks.length,
+      recentBlocks: unprocessedBlocks.slice(-3)
+    });
   } catch (error: any) {
     console.error("calcscore route error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
