@@ -210,6 +210,7 @@ export default function ProfilePage() {
                   onChange={(e) => setNickname(e.target.value)}
                   placeholder="Enter your nickname"
                   className="w-full"
+                  required
                 />
                 <p className="text-xs text-gray-500">
                   This will be displayed in chat messages and on the leaderboard
@@ -269,7 +270,7 @@ export default function ProfilePage() {
                 {saving ? (
                   <span className="flex items-center">
                     <svg
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                      className="animate-pulse -ml-1 mr-2 h-4 w-4 text-white"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
                       viewBox="0 0 24 24"

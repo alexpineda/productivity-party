@@ -3,14 +3,13 @@
 The main onboarding page that introduces users to the app and guides them through key features.
 </ai_context>
 <recent_changes>
-Fixed linter errors by escaping apostrophes.
-Added a prominent note about OpenAI API requirement.
+Added username generation functionality to ensure users have a nickname configured as soon as they arrive.
 </recent_changes>
 */
 
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,13 +26,106 @@ import {
   MessageCircle,
   ChartLine,
   AlertCircle,
+  CheckCircle,
 } from "lucide-react";
+import { usePipeSettings } from "@/hooks/use-pipe-settings";
+import { usePartyKitClient } from "@/lib/party-kit/party-kit-client";
+import { PipeSettings } from "@/lib/types/settings-types";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+/**
+ * Generates a unique username for new users
+ * @returns A randomly generated username
+ */
+function generateUniqueUsername(): string {
+  const adjectives = [
+    "Happy",
+    "Clever",
+    "Bright",
+    "Swift",
+    "Calm",
+    "Bold",
+    "Eager",
+    "Wise",
+    "Brave",
+    "Kind",
+    "Quick",
+    "Smart",
+    "Agile",
+    "Keen",
+    "Witty",
+    "Sharp",
+    "Lively",
+    "Nimble",
+    "Deft",
+    "Adept",
+  ];
+
+  const nouns = [
+    "Coder",
+    "Hacker",
+    "Builder",
+    "Maker",
+    "Creator",
+    "Genius",
+    "Wizard",
+    "Ninja",
+    "Guru",
+    "Expert",
+    "Master",
+    "Crafter",
+    "Architect",
+    "Engineer",
+    "Developer",
+    "Designer",
+    "Innovator",
+    "Pioneer",
+    "Visionary",
+    "Strategist",
+  ];
+
+  const randomAdjective =
+    adjectives[Math.floor(Math.random() * adjectives.length)];
+  const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
+  const randomNumber = Math.floor(Math.random() * 1000);
+
+  return `${randomAdjective}${randomNoun}${randomNumber}`;
+}
 
 export default function OnboardingPage() {
+  const { settings, updateSettings, loading } = usePipeSettings();
+  const { updateProfile } = usePartyKitClient();
+
+  // Check if user has a nickname and generate one if needed
+  useEffect(() => {
+    if (!loading && settings) {
+      const pipeSettings = settings as PipeSettings;
+      const storedNickname = pipeSettings.nickname || "";
+      const storedTask = pipeSettings.currentTask || "";
+      const storedRole = pipeSettings.role || "";
+
+      // If no nickname exists, generate one and save it
+      if (!storedNickname) {
+        const generatedNickname = generateUniqueUsername();
+
+        // Update settings with the generated nickname
+        updateSettings({
+          ...settings,
+          nickname: generatedNickname,
+        }).then((success) => {
+          if (success) {
+            // Update party server with the new profile info
+            updateProfile(generatedNickname, storedTask, storedRole);
+          }
+        });
+      }
+    }
+  }, [loading, settings, updateSettings, updateProfile]);
+
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
       {/* Welcome Header */}
-      <div className="text-center mb-10">
+      <div className="text-center mb-6">
         <h1 className="text-4xl font-bold tracking-tight mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
           Welcome to Productivity Party! 🎉
         </h1>

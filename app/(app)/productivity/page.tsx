@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import { useProductivityTracker } from "@/hooks/use-productivity-tracker";
 import {
   Card,
@@ -15,20 +15,27 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Shield,
   TrendingUp,
   Clock,
   RefreshCcw,
   AlertCircle,
+  Target,
+  Save,
+  CheckCircle,
 } from "lucide-react";
 import { usePipeSettings } from "@/hooks/use-pipe-settings";
 import { PRODUCTIVITY_SCORE_UPDATE_INTERVAL } from "@/config";
 import { getUserScore } from "@/app/actions/partykit-actions";
+import { usePartyKitClient } from "@/lib/party-kit/party-kit-client";
+import { PipeSettings } from "@/lib/types/settings-types";
 
 export default function ProductivityPage() {
   const { settings } = usePipeSettings();
