@@ -112,8 +112,10 @@ export default function ChatPage() {
           if (!processedMessageIds.current.has(messageId)) {
             processedMessageIds.current.add(messageId);
 
-            // Add to messages state
-            setMessages((prev) => [...prev, data]);
+            // Add to messages state and sort by timestamp
+            setMessages((prev) =>
+              [...prev, data].sort((a, b) => a.timestamp - b.timestamp)
+            );
           }
         }
       } catch (err) {
