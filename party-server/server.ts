@@ -34,6 +34,7 @@
 
 import type * as Party from "partykit/server";
 import { moderateMessage } from "@/app/actions/moderation";
+import { createServiceClient } from "./supabase-service-client";
 
 // Basic chat message structure
 interface ChatMessage {
@@ -62,15 +63,16 @@ interface ConnectionState {
   task: string;
   role: string;
   warningCount: number; // how many flagged messages
-  shadowBanned: boolean; // if user is shadow banned
   hasSetValidUserId: boolean; // flag to track if a valid userId has been set via hello message
 }
 
-// Scoreboard entry in ephemeral memory
+// Scoreboard entry in Supabase
 interface ScoreboardEntry {
-  userId: string;
-  username: string;
+  user_id: string;
+  user_name: string;
   score: number;
+  month: string;
+  region: string;
 }
 
 // Max saved messages to keep in ephemeral storage
@@ -99,9 +101,8 @@ export default class ChatServer implements Party.Server {
       task: "",
       role: "",
       warningCount: 0,
-      shadowBanned: false,
       userId: connection.id,
-      hasSetValidUserId: false, // Initialize as false until hello message is received
+      hasSetValidUserId: false,
     });
 
     // Retrieve existing messages from ephemeral storage
@@ -113,7 +114,7 @@ export default class ChatServer implements Party.Server {
       connection.send(JSON.stringify(msg));
     }
 
-    // Optionally broadcast scoreboard to just this user
+    // Send current scoreboard to new connection
     await this.broadcastScoreboardToConnection(connection);
   }
 
@@ -124,6 +125,80 @@ export default class ChatServer implements Party.Server {
     connection: Party.Connection<ConnectionState>
   ): boolean {
     return connection.state?.hasSetValidUserId === true;
+  }
+
+  private getCurrentMonth(): string {
+    return new Date().toISOString().slice(0, 7); // Returns YYYY-MM format
+  }
+
+  private async getScoreboard(): Promise<ScoreboardEntry[]> {
+    const db = await createServiceClient();
+    const { data, error } = await db
+      .from("scoreboard")
+      .select("*")
+      .eq("month", this.getCurrentMonth())
+      .order("score", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.error("Error fetching scoreboard:", error);
+      return [];
+    }
+
+    return data;
+  }
+
+  private async updateScore(
+    userId: string,
+    username: string,
+    newScore: number
+  ) {
+    const db = await createServiceClient();
+    const month = this.getCurrentMonth();
+
+    // First check if user is banned
+    const { data: bannedData } = await db
+      .from("banned")
+      .select("banned_score_reason")
+      .eq("user_id", userId)
+      .single();
+
+    if (bannedData?.banned_score_reason) {
+      console.log("Banned user attempted to update score:", userId);
+      return false;
+    }
+
+    // Upsert the score
+    const { error } = await db.from("scoreboard").upsert(
+      {
+        user_id: userId,
+        user_name: username,
+        score: newScore,
+        month,
+        region: "global", // You can make this configurable if needed
+      },
+      {
+        onConflict: "user_id,month",
+      }
+    );
+
+    if (error) {
+      console.error("Error updating score:", error);
+      return false;
+    }
+
+    return true;
+  }
+
+  private async isUserBanned(userId: string): Promise<boolean> {
+    const db = await createServiceClient();
+    const { data } = await db
+      .from("banned")
+      .select("banned_chat_reason")
+      .eq("user_id", userId)
+      .single();
+
+    return !!data?.banned_chat_reason;
   }
 
   /**
@@ -156,7 +231,6 @@ export default class ChatServer implements Party.Server {
           task: data.currentTask || "",
           role: data.role || "",
           warningCount: 0,
-          shadowBanned: false,
           userId: data.userId,
           hasSetValidUserId: true,
         };
@@ -164,10 +238,8 @@ export default class ChatServer implements Party.Server {
         sender.setState({
           ...currentState,
           userId: data.userId,
-          hasSetValidUserId: true, // Mark that a valid userId has been set
+          hasSetValidUserId: true,
         });
-
-        console.log("onConnect", sender.id, data.userId);
       }
       return; // Exit after processing hello message
     }
@@ -197,26 +269,27 @@ export default class ChatServer implements Party.Server {
           role: data.role || currentState.role,
         });
 
-        // Update scoreboard entry if it exists
-        const scoreboard =
-          (await this.room.storage.get<ScoreboardEntry[]>("scoreboard")) ?? [];
-        const idx = scoreboard.findIndex(
-          (e) => e.userId === currentState.userId
-        );
-        if (idx >= 0) {
-          scoreboard[idx].username = data.name || currentState.username;
-          await this.room.storage.put("scoreboard", scoreboard);
-          await this.broadcastScoreboard();
+        // If they have a score, update their username there too
+        if (data.name) {
+          const db = await createServiceClient();
+          await db
+            .from("scoreboard")
+            .update({ user_name: data.name })
+            .eq("user_id", currentState.userId)
+            .eq("month", this.getCurrentMonth());
         }
+
+        await this.broadcastScoreboard();
         break;
       }
 
       case "chat": {
-        // If user is shadow banned, we do not broadcast
-        // but we let them see their own message
         const currentState = sender.state!;
-        const { shadowBanned, username, warningCount } = currentState;
+        const { username, warningCount } = currentState;
         const text = data.text || "";
+
+        // Check if user is banned from the database
+        const isBanned = await this.isUserBanned(currentState.userId);
 
         // Create the new ChatMessage
         const newMessage: ChatMessage = {
@@ -226,40 +299,30 @@ export default class ChatServer implements Party.Server {
           timestamp: Date.now(),
         };
 
-        // If shadow banned, only send back to user themself
-        if (shadowBanned) {
+        // If banned, only send back to user themself
+        if (isBanned) {
           sender.send(JSON.stringify(newMessage));
-          // do not broadcast or store
           return;
         }
 
         // Otherwise we do moderation
         const flagged = await moderateMessage(text);
         if (flagged) {
-          // Discard or sanitize the message. We'll just discard
-          // increment warning count
           const newCount = warningCount + 1;
           sender.setState({
             ...currentState,
             warningCount: newCount,
           });
 
-          // Check if they exceed threshold => shadow ban them
+          // Check if they exceed threshold => ban them
           if (newCount >= MAX_WARNINGS) {
-            sender.setState({
-              ...currentState,
-              shadowBanned: true,
+            // Record the ban in Supabase
+            const db = await createServiceClient();
+            await db.from("banned").upsert({
+              user_id: currentState.userId,
+              banned_chat_reason: "Exceeded maximum warnings",
             });
-            // we can optionally send them a private message about the ban
-            const banMsg: ChatMessage = {
-              type: "chat",
-              from: "System",
-              text: "You have been shadow banned for repeated TOS violations.",
-              timestamp: Date.now(),
-            };
-            sender.send(JSON.stringify(banMsg));
           }
-          // We do NOT broadcast flagged content
           return;
         }
 
@@ -289,34 +352,7 @@ export default class ChatServer implements Party.Server {
         const userId = currentState.userId; // Use the userId from state, not from the message
         const newScore = typeof data.score === "number" ? data.score : 0;
 
-        // update scoreboard in ephemeral storage
-        const scoreboard =
-          (await this.room.storage.get<ScoreboardEntry[]>("scoreboard")) ?? [];
-
-        // find existing entry by userId
-        const idx = scoreboard.findIndex((e) => e.userId === userId);
-        if (idx >= 0) {
-          scoreboard[idx].score = newScore;
-          scoreboard[idx].username = currentState.username;
-        } else {
-          scoreboard.push({
-            userId,
-            username: currentState.username || "Anonymous",
-            score: newScore,
-          });
-        }
-
-        // sort descending by score, then alpha by username
-        scoreboard.sort((a, b) => {
-          if (b.score !== a.score) {
-            return b.score - a.score;
-          }
-          return a.username.localeCompare(b.username);
-        });
-
-        await this.room.storage.put("scoreboard", scoreboard);
-
-        // broadcast scoreboard to all
+        await this.updateScore(userId, currentState.username, newScore);
         await this.broadcastScoreboard();
         break;
       }
@@ -348,7 +384,6 @@ export default class ChatServer implements Party.Server {
             task: "none",
             role: "",
             warningCount: 0,
-            shadowBanned: false,
             userId: conn.state?.userId || "",
             hasSetValidUserId: false,
           },
@@ -395,7 +430,11 @@ export default class ChatServer implements Party.Server {
          *
          * Clears the leaderboard/scoreboard
          */
-        await this.room.storage.put("scoreboard", []);
+        const db = await createServiceClient();
+        await db
+          .from("scoreboard")
+          .delete()
+          .eq("month", this.getCurrentMonth());
 
         // Broadcast empty scoreboard to all
         await this.broadcastScoreboard();
@@ -422,8 +461,7 @@ export default class ChatServer implements Party.Server {
    * Reads scoreboard from ephemeral storage, sends to all
    */
   private async broadcastScoreboard() {
-    const scoreboard =
-      (await this.room.storage.get<ScoreboardEntry[]>("scoreboard")) ?? [];
+    const scoreboard = await this.getScoreboard();
     const msg = {
       type: "scoreboard",
       scoreboard,
@@ -438,8 +476,7 @@ export default class ChatServer implements Party.Server {
   private async broadcastScoreboardToConnection(
     connection: Party.Connection<ConnectionState>
   ) {
-    const scoreboard =
-      (await this.room.storage.get<ScoreboardEntry[]>("scoreboard")) ?? [];
+    const scoreboard = await this.getScoreboard();
     const msg = {
       type: "scoreboard",
       scoreboard,
@@ -478,38 +515,17 @@ export default class ChatServer implements Party.Server {
             });
           }
 
-          const userId = data.userId;
-          const newScore = data.score;
+          // Get current username from scoreboard
+          const db = await createServiceClient();
+          const { data: userData } = await db
+            .from("scoreboard")
+            .select("user_name")
+            .eq("user_id", data.userId)
+            .single();
 
-          // Update scoreboard in ephemeral storage
-          const scoreboard =
-            (await this.room.storage.get<ScoreboardEntry[]>("scoreboard")) ??
-            [];
+          const username = userData?.user_name || "Anonymous";
 
-          // Find existing entry by userId
-          const idx = scoreboard.findIndex((e) => e.userId === userId);
-          if (idx >= 0) {
-            scoreboard[idx].score = newScore;
-            // Keep the existing username
-          } else {
-            scoreboard.push({
-              userId,
-              username: "Anonymous", // Default username for HTTP requests
-              score: newScore,
-            });
-          }
-
-          // Sort descending by score, then alpha by username
-          scoreboard.sort((a, b) => {
-            if (b.score !== a.score) {
-              return b.score - a.score;
-            }
-            return a.username.localeCompare(b.username);
-          });
-
-          await this.room.storage.put("scoreboard", scoreboard);
-
-          // Broadcast updated scoreboard to all connections
+          await this.updateScore(data.userId, username, data.score);
           await this.broadcastScoreboard();
 
           return new Response(JSON.stringify({ success: true }), {
