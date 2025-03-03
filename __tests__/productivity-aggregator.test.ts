@@ -22,64 +22,95 @@ import { aggregateProductivityBlocks } from "@/app/actions/productivity-actions"
 import type { ProductivityBlock } from "@/lib/types/productivity-types";
 
 describe("aggregateProductivityBlocks function", () => {
-  it("should sum up blocks with productive => +1, unproductive => -1, break => 0", () => {
+  it("should sum up blocks with productive => +1, unproductive => -1, break => 0", async () => {
     const blocks: ProductivityBlock[] = [
       {
         startTime: "2025-03-01T10:00:00Z",
         endTime: "2025-03-01T10:05:00Z",
-        classification: "productive",
+        classification: {
+          classification: "productive",
+          shortSummary: "",
+          reason: "",
+        },
+        contentSummary: "",
       } as ProductivityBlock,
       {
         startTime: "2025-03-01T10:05:00Z",
         endTime: "2025-03-01T10:10:00Z",
-        classification: "unproductive",
+        classification: {
+          classification: "unproductive",
+          shortSummary: "",
+          reason: "",
+        },
+        contentSummary: "",
       } as ProductivityBlock,
       {
         startTime: "2025-03-01T10:10:00Z",
         endTime: "2025-03-01T10:15:00Z",
-        classification: "break",
+        classification: {
+          classification: "break",
+          shortSummary: "",
+          reason: "",
+        },
+        contentSummary: "",
       } as ProductivityBlock,
     ];
     // net result => +1 -1 +0 = 0
-    const result = aggregateProductivityBlocks(blocks);
+    const result = await aggregateProductivityBlocks(blocks);
     expect(result).toBe(0);
   });
 
-  it("should support partial activeRatio weighting", () => {
+  it("should support partial activeRatio weighting", async () => {
     const blocks: ProductivityBlock[] = [
       {
         startTime: "2025-03-01T10:00:00Z",
         endTime: "2025-03-01T10:05:00Z",
-        classification: "productive",
+        classification: {
+          classification: "productive",
+          shortSummary: "",
+          reason: "",
+        },
         activeRatio: 0.5, // partial block
+        contentSummary: "",
       },
       {
         startTime: "2025-03-01T10:05:00Z",
         endTime: "2025-03-01T10:10:00Z",
-        classification: "productive",
+        classification: {
+          classification: "productive",
+          shortSummary: "",
+          reason: "",
+        },
+        contentSummary: "",
       } as ProductivityBlock,
       {
         startTime: "2025-03-01T10:10:00Z",
         endTime: "2025-03-01T10:15:00Z",
-        classification: "unproductive",
+        classification: {
+          classification: "unproductive",
+          shortSummary: "",
+          reason: "",
+        },
         activeRatio: 0.25,
+        contentSummary: "",
       },
     ];
     // sum => +0.5 +1 -0.25 = 1.25 => round => 1
-    const result = aggregateProductivityBlocks(blocks);
+    const result = await aggregateProductivityBlocks(blocks);
     expect(result).toBe(1);
   });
 
-  it("should treat unknown classification as break (0)", () => {
+  it("should treat unknown classification as break (0)", async () => {
     const blocks = [
       {
         startTime: "2025-03-01T10:00:00Z",
         endTime: "2025-03-01T10:05:00Z",
         classification: "some-future-unhandled-state" as any,
         activeRatio: 1,
+        contentSummary: "",
       },
     ] as ProductivityBlock[];
-    const result = aggregateProductivityBlocks(blocks);
+    const result = await aggregateProductivityBlocks(blocks);
     expect(result).toBe(0);
   });
 });

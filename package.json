@@ -19,7 +19,8 @@
     "db:schema:docs": "bun scripts/format-schema.js",
     "partykit:dev": "partykit dev --live",
     "partykit:deploy": "partykit deploy",
-    "dev:all": "concurrently \"npm run dev\" \"npm run partykit:dev\"",
+    "cron:dev": "node scripts/simulate-cron.js",
+    "dev:all": "concurrently \"npm run dev\" \"npm run partykit:dev\" \"npm run cron:dev\"",
     "test": "vitest",
     "typecheck": "tsc --noEmit"
   },

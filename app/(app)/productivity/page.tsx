@@ -36,16 +36,15 @@ export default function ProductivityPage() {
     loading,
     error,
     refreshProductivityData,
-    fetchProductivityData,
+    fetchHistoricalData,
   } = useProductivityTracker();
 
   useEffect(() => {
     if (!settings) return;
 
-    // Fetch data on component mount
-    // This will trigger the score calculation through the cron job endpoint
-    // and then fetch the updated blocks for display
-    fetchProductivityData();
+    // Fetch historical data on component mount
+    // This only retrieves data for display, doesn't trigger scoring
+    fetchHistoricalData();
   }, [settings]);
 
   // Handle manual refresh button click
@@ -134,19 +133,22 @@ export default function ProductivityPage() {
                       </span>
                       <Badge
                         variant={
-                          block.classification === "productive"
+                          block.classification.classification === "productive"
                             ? "default"
-                            : block.classification === "break"
+                            : block.classification.classification === "break"
                             ? "secondary"
                             : "destructive"
                         }
                       >
-                        {block.classification}
+                        {block.classification.classification}
                       </Badge>
                     </div>
                     {/* Display the short AI summary */}
                     <p className="text-xs text-gray-700 mt-1 italic">
-                      {block.aiDescription || "No summary."}
+                      {block.classification.shortSummary || "No summary."}
+                    </p>
+                    <p className="text-xs text-gray-700 mt-1 italic">
+                      {block.classification.reason || "No reason."}
                     </p>
                   </div>
                 ))

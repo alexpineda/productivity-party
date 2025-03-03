@@ -64,6 +64,7 @@ export function DebugState() {
   const [loading, setLoading] = useState(false);
   const [clearingMessages, setClearingMessages] = useState(false);
   const [clearingLeaderboard, setClearingLeaderboard] = useState(false);
+  const [clearingProductivity, setClearingProductivity] = useState(false);
   const { settings, updateSettings } = usePipeSettings();
 
   // Get user ID from settings
@@ -142,6 +143,19 @@ export function DebugState() {
     setTimeout(() => setClearingLeaderboard(false), 1000);
   };
 
+  const handleClearProductivityBlocks = () => {
+    setClearingProductivity(true);
+
+    // Clear local productivity blocks and reset score
+    updateSettings({
+      ...settings,
+      productivityBlocks: [],
+      productivityScore: 0,
+    });
+
+    setTimeout(() => setClearingProductivity(false), 1000);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -207,6 +221,29 @@ export function DebugState() {
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction onClick={handleClearLeaderboard}>
                 Clear Leaderboard
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" disabled={clearingProductivity}>
+              {clearingProductivity ? "Clearing..." : "Clear Productivity Data"}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear Productivity Data</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will reset your local productivity blocks and score to
+                zero. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleClearProductivityBlocks}>
+                Clear Productivity Data
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

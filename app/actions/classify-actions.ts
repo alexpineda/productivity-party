@@ -2,20 +2,18 @@
  * @file classify-actions.ts
  * @description
  * This file provides a server-side action for classifying a block of text
- * as either 'productive' or 'unproductive' using OpenAI or a user-selected
+ * as either 'productive', 'unproductive', or 'break' using OpenAI or a user-selected
  * AI provider (e.g., screenpipe-cloud).
  *
  * Exports:
  * - classifyBlock: A server action that:
  *   1. Receives chunked text and a user role (ex: "I'm a dev, classify text as dev-productive or unproductive").
  *   2. Optionally calls the OpenAI Moderation endpoint to verify the text is safe to process.
- *   3. Calls the Chat Completion API with a short system prompt to label the text.
- *   4. Returns 'productive' or 'unproductive' based on the LLM reply.
+ *   3. Calls the Chat Completion API with a system prompt to label the text.
+ *   4. Returns a JSON object with classification, summary, and reason.
  *
  * @notes
  * - If moderation is flagged, we currently default to 'unproductive'.
- * - If the LLM returns anything other than "productive", we default to "unproductive".
- * - This approach can be refined as needed (e.g., break handling or partial scoring).
  * - The classification logic is intentionally simplified to demonstrate how to integrate with LLM.
  */
 
@@ -23,6 +21,15 @@
 
 import { pipe } from "@screenpipe/js";
 import { OpenAI } from "openai";
+
+/**
+ * Classification result type
+ */
+export type ClassificationResult = {
+  classification: "productive" | "unproductive" | "break";
+  shortSummary: string;
+  reason: string;
+};
 
 /**
  * Helper function: fetch openai or screenpipe-cloud config from user settings
@@ -62,19 +69,23 @@ export async function getOpenAiClient() {
  * @param text The chunked text from the user's screen usage
  * @param role A brief descriptor (e.g., "I'm a dev focusing on coding tasks")
  *
- * @returns The classification string: 'productive' | 'unproductive'
+ * @returns A ClassificationResult object with classification, summary, and reason
  *
  * @example
  * const result = await classifyBlock("Browsing stackoverflow about React hooks", "I'm a dev focusing on web dev tasks");
- * // returns "productive"
+ * // returns { classification: "productive", shortSummary: "Researching React hooks on Stack Overflow", reason: "Directly related to web development tasks" }
  */
 export async function classifyBlock(
   text: string,
   role: string = "I'm a developer"
-): Promise<"productive" | "unproductive"> {
+): Promise<ClassificationResult> {
   // Early exit if there's no text or it's just whitespace
   if (!text || !text.trim()) {
-    return "unproductive";
+    return {
+      classification: "unproductive",
+      shortSummary: "Empty or whitespace-only input",
+      reason: "No meaningful content was detected to classify",
+    };
   }
 
   try {
@@ -97,16 +108,32 @@ export async function classifyBlock(
 
     // If content was flagged, return unproductive immediately
     if (isFlagged) {
-      return "unproductive";
+      return {
+        classification: "unproductive",
+        shortSummary: "Content flagged by moderation",
+        reason: "The content was flagged by the content moderation system",
+      };
     }
 
     // Classification via chat completion
     const systemPrompt = `
       You are a classification assistant. 
       The user is: ${role}.
-      You ONLY output "productive" or "unproductive" (nothing else).
-      "productive" means the text is relevant to user tasks or job.
-      "unproductive" means not relevant or is a distraction.
+      You will analyze the provided text and determine if it represents a productive, unproductive, or break activity.
+      
+      Respond ONLY with a JSON object in the following format:
+      {
+        "classification": "productive" | "unproductive" | "break",
+        "shortSummary": "A brief, 5-10 word summary of what was done in this time block",
+        "reason": "A short explanation of why you classified it this way"
+      }
+      
+      Guidelines:
+      - "productive" means the text is relevant to user tasks or job.
+      - "unproductive" means not relevant or is a distraction.
+      - "break" means the user is clearly taking a designated break.
+      - Keep shortSummary to 5-10 words max
+      - Keep reason to 1-2 sentences max
     `.trim();
 
     const userPrompt = `
@@ -114,7 +141,7 @@ export async function classifyBlock(
       """ 
       ${text}
       """
-      Decide if this is 'productive' or 'unproductive' for ${role}.
+      Classify this activity for ${role} in JSON format as specified.
     `.trim();
 
     const chatResp = await openai.chat.completions.create({
@@ -124,18 +151,49 @@ export async function classifyBlock(
         { role: "user", content: userPrompt },
       ],
       temperature: 0.0,
-      max_tokens: 10,
+      max_tokens: 500,
+      response_format: { type: "json_object" },
     });
 
-    const rawAnswer =
-      chatResp.choices?.[0]?.message?.content?.toLowerCase() || "";
+    const responseContent = chatResp.choices?.[0]?.message?.content || "";
 
-    // Only return 'productive' if it explicitly contains the word 'productive'
-    // This ensures any other response (including empty or unexpected) defaults to 'unproductive'
-    return rawAnswer.includes("productive") ? "productive" : "unproductive";
+    try {
+      // Parse the JSON response
+      const parsedResponse = JSON.parse(
+        responseContent
+      ) as ClassificationResult;
+
+      // Validate classification is one of the allowed values
+      if (
+        !["productive", "unproductive", "break"].includes(
+          parsedResponse.classification
+        )
+      ) {
+        parsedResponse.classification = "unproductive";
+      }
+
+      // Ensure all required fields exist
+      return {
+        classification: parsedResponse.classification,
+        shortSummary: parsedResponse.shortSummary || "Unknown activity",
+        reason: parsedResponse.reason || "No reason provided",
+      };
+    } catch (parseError) {
+      console.error("Error parsing LLM response:", parseError, responseContent);
+      // Return default on parse error
+      return {
+        classification: "unproductive",
+        shortSummary: "Error analyzing activity",
+        reason: "Could not properly analyze the content",
+      };
+    }
   } catch (error) {
     console.error("Error in classifyBlock:", error);
-    // On any error, default to 'unproductive'
-    return "unproductive";
+    // On any error, default to 'unproductive' with explanation
+    return {
+      classification: "unproductive",
+      shortSummary: "Error processing content",
+      reason: "An error occurred during classification",
+    };
   }
 }

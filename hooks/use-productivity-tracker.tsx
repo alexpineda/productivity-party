@@ -1,76 +1,67 @@
 /**
  * @file use-productivity-tracker.tsx
  * @description
- * A client-side hook that coordinates classification, aggregation, and score updates.
+ * A client-side hook that coordinates productivity data display and scoring.
  *
  * Implementation:
- * - We rely on existing hooks or actions:
- *   - getProductivityData() from productivity-actions (fetch blocks)
- *   - classifyBlock() from classify-actions (classify each block's text)
- *   - aggregateProductivityBlocks() to sum up the classifications
- *   - updateUserScore() to persist the final score
- *
- * This example function classifyAndScoreAllBlocks() shows how you could do it:
- *   1. fetch the raw blocks
- *   2. classify each block with your LLM
- *   3. aggregate the final score
- *   4. update user score in settings
+ * - This hook is primarily for UI display, not for classification/scoring
+ * - Actual scoring happens via the /api/calcscore endpoint (via cron job)
+ * - The hook provides methods to:
+ *   1. Fetch and display historical productivity data
+ *   2. Trigger the scoring pipeline via API when manually requested
  *
  * Key Exports:
- * - useProductivityTracker: Returns { blocks, score, loading, error, classifyAndScoreAllBlocks }
+ * - useProductivityTracker: Returns { blocks, score, loading, error, refreshProductivityData, fetchHistoricalData }
  *
  * @dependencies
  * - React for state management
- * - classifyBlock from classify-actions
- * - getProductivityData, aggregateProductivityBlocks, updateUserScore from productivity-actions
+ * - getProductivityData from productivity-actions
+ * - PartyKit for getting real-time score updates
  */
 
 "use client";
 
 import { useState, useEffect } from "react";
 import type { ProductivityBlock } from "@/lib/types/productivity-types";
-import {
-  getProductivityData,
-  aggregateProductivityBlocks,
-  updateUserScore,
-} from "@/app/actions/productivity-actions";
-import { classifyBlock } from "@/app/actions/classify-actions";
-import { summarizeText } from "@/app/actions/summarize-actions";
+import { getProductivityData } from "@/app/actions/productivity-actions";
 import { usePipeSettings } from "@/hooks/use-pipe-settings";
-import { PipeSettings } from "@/lib/types/settings-types";
 
 /**
- * Hook for tracking and displaying productivity data
+ * Hook for displaying productivity data and managing score refresh
  *
- * This hook fetches productivity data that has been processed by the cron job
- * and doesn't perform any classification or scoring logic itself.
+ * This hook is primarily for UI display and doesn't handle classification
+ * or scoring logic directly - that's done by the calcscore API endpoint.
  */
 export function useProductivityTracker() {
-  const { settings, updateSettings } = usePipeSettings();
+  const { settings } = usePipeSettings();
   const [blocks, setBlocks] = useState<ProductivityBlock[]>([]);
   const [score, setScore] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load productivity data and score from settings on mount
+  // Load productivity score from settings on mount
   useEffect(() => {
     if (settings) {
       setScore(settings.customSettings?.productivityScore || 0);
-      fetchProductivityData();
+      // On initial mount, fetch historical data
+      fetchHistoricalData();
     }
   }, [settings]);
 
-  // Fetch productivity data from the server
-  async function fetchProductivityData(lookbackIntervals: number = 7) {
+  /**
+   * Fetch historical productivity data for display purposes
+   * This includes both processed and unprocessed blocks
+   */
+  async function fetchHistoricalData(lookbackIntervals: number = 7) {
     setLoading(true);
     setError(null);
 
     try {
-      // Fetch the productivity data that has already been processed by the cron job
-      const fetchedBlocks = await getProductivityData(lookbackIntervals);
-      setBlocks(fetchedBlocks);
+      // Fetch all productivity data (processed and unprocessed)
+      const historicalBlocks = await getProductivityData(lookbackIntervals);
+      setBlocks(historicalBlocks);
     } catch (err) {
-      console.error("Failed to fetch productivity data:", err);
+      console.error("Failed to fetch historical productivity data:", err);
       if (err instanceof Error) {
         console.error(err.stack);
       }
@@ -84,22 +75,55 @@ export function useProductivityTracker() {
     }
   }
 
-  // Force a refresh of productivity data (e.g., after role change)
+  /**
+   * Force a refresh of productivity data and scoring
+   * This triggers the calcscore API endpoint to process new blocks
+   */
   async function refreshProductivityData(lookbackIntervals: number = 7) {
-    // Trigger the cron job to recalculate scores
     try {
       setLoading(true);
+      
+      // 1. Trigger the calcscore endpoint to process new blocks and update score
       const response = await fetch("/api/calcscore");
       const data = await response.json();
 
+      // Check if the request was successful
       if (data.success) {
-        // Once calculation is complete, fetch the updated data
-        await fetchProductivityData(lookbackIntervals);
-        // Update the local score state from the response
-        setScore(data.currentScore);
+        // 2. After processing completes, fetch updated historical data
+        await fetchHistoricalData(lookbackIntervals);
+        
+        // 3. Use the score delta to update our local score state
+        if (data.scoreDelta) {
+          setScore(prevScore => prevScore + data.scoreDelta);
+        } else if (data.currentScore !== undefined) {
+          // If we got a currentScore (no blocks processed case), use that
+          setScore(data.currentScore);
+        }
+        
+        // 4. If we got recent blocks, add them to our state
+        if (data.recentBlocks && data.recentBlocks.length > 0) {
+          setBlocks(prevBlocks => {
+            // Create a map of existing blocks by ID
+            const blockMap = new Map(
+              prevBlocks.map(block => [block.id, block])
+            );
+            
+            // Add new blocks to the map
+            data.recentBlocks.forEach((block: ProductivityBlock) => {
+              if (block.id) {
+                blockMap.set(block.id, {...block, processed: true});
+              }
+            });
+            
+            // Sort blocks by time
+            return Array.from(blockMap.values()).sort((a, b) => 
+              new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+            );
+          });
+        }
       } else {
         throw new Error(
-          data.message || "Failed to recalculate productivity score"
+          data.message || data.error || "Failed to recalculate productivity score"
         );
       }
     } catch (err) {
@@ -120,6 +144,6 @@ export function useProductivityTracker() {
     loading,
     error,
     refreshProductivityData,
-    fetchProductivityData,
+    fetchHistoricalData,
   };
 }

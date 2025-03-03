@@ -1,74 +1,47 @@
 // app/api/calcscore/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import {
-  getProductivityData,
-  aggregateProductivityBlocks,
-  updateUserScore,
-} from "@/app/actions/productivity-actions";
-import { classifyBlock } from "@/app/actions/classify-actions";
+import { processAndScoreNewBlocks } from "@/app/actions/productivity-actions";
 import { appendToLog } from "@/lib/utilities/log-utils";
-import type { ProductivityBlock } from "@/lib/types/productivity-types";
 import { pipe } from "@screenpipe/js";
-import { PRODUCTIVITY_SCORE_UPDATE_INTERVAL } from "@/config";
 
+/**
+ * GET route handler for /api/calcscore
+ * 
+ * This endpoint is a thin wrapper around the processAndScoreNewBlocks function
+ * which handles the entire pipeline of fetching unprocessed blocks, classifying them,
+ * calculating score delta, and updating the user's score.
+ * 
+ * It can be triggered by a cron job or manually by the user.
+ */
 export async function GET(request: NextRequest) {
   try {
-    appendToLog(new Date().toISOString() + " cron job: calcscore");
+    appendToLog(new Date().toISOString() + " API call: calcscore");
 
     // Get user's role from settings
     const settings = await pipe.settings.getAll();
     const userRole = settings.customSettings?.pipe?.role || "I'm a developer"; // Default to developer if no role set
+    const currentScore = settings.customSettings?.productivityScore || 0;
 
-    // 1. Pull raw blocks for the last 3 intervals (looking back)
-    const blocks = await getProductivityData(3);
-    // const blocks = await getMockProductivityData();
-
-    // Only process blocks that haven't been processed yet
-    const unprocessedBlocks = blocks.filter((block) => !block.processed);
-
-    if (unprocessedBlocks.length === 0) {
-      appendToLog("No unprocessed blocks found");
+    // Process all unprocessed blocks and get the results
+    const result = await processAndScoreNewBlocks(userRole, 3);
+    
+    // If no blocks were processed, include the current score in the response
+    if (result.processedBlockCount === 0) {
       return NextResponse.json({
-        success: true,
+        ...result,
         message: "No new blocks to process",
-        currentScore: settings.customSettings?.productivityScore || 0,
+        currentScore
       });
     }
-
-    appendToLog(`Processing ${unprocessedBlocks.length} unprocessed blocks`);
-
-    // 2. Classify each unprocessed block
-    for (const block of unprocessedBlocks) {
-      if (!block.contentSummary?.trim()) {
-        block.classification = "break";
-        continue;
-      }
-      // Pass the user's role to classifyBlock
-      const label = await classifyBlock(block.contentSummary, userRole);
-      block.classification = label;
-    }
-
-    // 3. Aggregate to get a score delta
-    const scoreDelta = await aggregateProductivityBlocks(unprocessedBlocks);
-
-    // 4. Update user's total score and store processed blocks
-    const newScore = await updateUserScore(scoreDelta, true, unprocessedBlocks);
-
-    appendToLog({
-      scoreDelta,
-      newScore,
-      processedBlockCount: unprocessedBlocks.length,
-    });
-
-    return NextResponse.json({
-      success: true,
-      scoreDelta,
-      newScore,
-      processedBlockCount: unprocessedBlocks.length,
-      recentBlocks: unprocessedBlocks.slice(-3),
-    });
+    
+    // Return the processing results
+    return NextResponse.json(result);
   } catch (error: any) {
     console.error("calcscore route error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    appendToLog(`calcscore API error: ${error.message}`);
+    return NextResponse.json({ 
+      success: false,
+      error: error.message 
+    }, { status: 500 });
   }
 }

@@ -14,27 +14,21 @@
 
 import type { ContentItem } from "@screenpipe/js";
 import { PRODUCTIVITY_SCORE_UPDATE_INTERVAL } from "@/config";
-
-/**
- * A helper interface to represent items grouped in a time-based block.
- */
-interface PartitionedBlock {
-  startTime: string;
-  endTime: string;
-  items: ContentItem[];
-}
+import type { RawContentItem, PartitionedBlock } from "@/lib/types/productivity-types";
 
 /**
  * Partition the given ContentItems (frames) into N-minute blocks.
  * We assume the items are from a roughly 15-minute range, but we
  * generate 5-minute slices by default.
  *
- * @param items - The array of ContentItems (OCR/UI) from Screenpipe
+ * This function supports both ContentItem from @screenpipe/js and our internal RawContentItem type
+ *
+ * @param items - The array of ContentItems/RawContentItems (OCR/UI) from Screenpipe
  * @param blockDurationMins - The duration of each block in minutes (default=5)
  * @returns An array of PartitionedBlock, each with a time window and its items
  */
 export function partitionIntoBlocks(
-  items: ContentItem[],
+  items: (ContentItem | RawContentItem)[],
   blockDurationMins: number = PRODUCTIVITY_SCORE_UPDATE_INTERVAL
 ): PartitionedBlock[] {
   if (!items || items.length === 0) return [];
@@ -62,11 +56,12 @@ export function partitionIntoBlocks(
     const currentBlockEnd = currentBlockStart + blockDurationMs;
 
     // Collect items that fall into [currentBlockStart, currentBlockEnd)
-    const blockItems: ContentItem[] = [];
+    const blockItems: RawContentItem[] = [];
     for (const item of sortedItems) {
       const itemTime = new Date(getTimestamp(item)).getTime();
       if (itemTime >= currentBlockStart && itemTime < currentBlockEnd) {
-        blockItems.push(item);
+        // Cast to RawContentItem since we're now consistently using that type
+        blockItems.push(item as RawContentItem);
       }
     }
 
@@ -86,13 +81,18 @@ export function partitionIntoBlocks(
 }
 
 /**
- * A helper to get the timestamp from a ContentItem, whether it's OCR or UI.
+ * A helper to get the timestamp from a ContentItem or RawContentItem, whether it's OCR or UI.
  * If none found, returns current time as fallback.
  */
-function getTimestamp(item: ContentItem): string {
+function getTimestamp(item: ContentItem | RawContentItem): string {
+  // Check if item has a 'timestamp' property directly (RawContentItem)
+  if ('timestamp' in item && typeof item.timestamp === 'string') {
+    return item.timestamp;
+  }
+  
+  // Otherwise check for nested timestamp in content (ContentItem)
   switch (item.type) {
     case "OCR":
-      return item.content.timestamp;
     case "UI":
       return item.content.timestamp;
     default:

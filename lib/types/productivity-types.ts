@@ -5,13 +5,38 @@
  * capturing user screen usage blocks, classifying them, etc.
  *
  * Key Exports:
- * - ProductivityBlock: A chunk of time with classification
+ * - RawContentItem: Individual content item from ScreenPipe API
+ * - PartitionedBlock: Raw content items grouped by time
+ * - ProductivityBlock: A processed chunk of time with classification
  * - ProductivityClassification: Summarized verdict from the LLM
  *
  * @notes
  * - "productive", "unproductive", and "break" are the main states.
  * - Additional metadata can be added as needed.
  */
+
+/**
+ * Raw content item from the ScreenPipe API
+ */
+export interface RawContentItem {
+  id: string;
+  timestamp: string;
+  type: string; // "OCR" or "UI" typically
+  content: {
+    text: string;
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
+
+/**
+ * Represents a time-based partition of raw content items
+ */
+export interface PartitionedBlock {
+  startTime: string;
+  endTime: string;
+  items: RawContentItem[];
+}
 
 /**
  * Represents a single block of user activity (e.g., a 5-minute window),
@@ -31,7 +56,7 @@ export interface ProductivityBlock {
   /**
    * Optional text or aggregated screen data used in classification.
    */
-  contentSummary?: string;
+  contentSummary: string;
 
   /**
    * Result of the LLM classification, typically:
@@ -44,11 +69,6 @@ export interface ProductivityBlock {
    * we could store the fraction here to weigh the score.
    */
   activeRatio?: number;
-
-  /**
-   * Description of the block from the AI.
-   */
-  aiDescription?: string;
 
   /**
    * Unique identifier for the block, typically based on timestamp
@@ -64,7 +84,8 @@ export interface ProductivityBlock {
 /**
  * The classification label assigned by the LLM or aggregator.
  */
-export type ProductivityClassification =
-  | "productive"
-  | "unproductive"
-  | "break";
+export type ProductivityClassification = {
+  classification: "productive" | "unproductive" | "break";
+  shortSummary: string;
+  reason: string;
+};
