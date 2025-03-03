@@ -35,9 +35,10 @@
 import type * as Party from "partykit/server";
 import { moderateMessage } from "@/app/actions/moderation";
 import { createServiceClient } from "./supabase-service-client";
+import { TTLCache } from "./utils/ttl-cache";
 
 // Basic chat message structure
-interface ChatMessage {
+interface ChatMessageStorage {
   type: "chat";
   from: string;
   text: string;
@@ -86,7 +87,11 @@ const MAX_WARNINGS = 3;
  * message moderation with repeated flags => shadow ban.
  */
 export default class ChatServer implements Party.Server {
-  constructor(public room: Party.Room) {}
+  private bannedChatCache: TTLCache<boolean>;
+
+  constructor(public room: Party.Room) {
+    this.bannedChatCache = new TTLCache<boolean>();
+  }
 
   /**
    * onConnect
@@ -107,7 +112,7 @@ export default class ChatServer implements Party.Server {
 
     // Retrieve existing messages from ephemeral storage
     const messages =
-      (await this.room.storage.get<ChatMessage[]>("messages")) ?? [];
+      (await this.room.storage.get<ChatMessageStorage[]>("messages")) ?? [];
 
     // Send them to the newly connected user
     for (const msg of messages) {
@@ -191,6 +196,13 @@ export default class ChatServer implements Party.Server {
   }
 
   private async isUserBanned(userId: string): Promise<boolean> {
+    // Check cache first
+    const cachedBanned = this.bannedChatCache.get(userId);
+    if (cachedBanned !== null) {
+      return cachedBanned;
+    }
+
+    // Cache miss - check database
     const db = await createServiceClient();
     const { data } = await db
       .from("banned")
@@ -198,7 +210,11 @@ export default class ChatServer implements Party.Server {
       .eq("user_id", userId)
       .single();
 
-    return !!data?.banned_chat_reason;
+    const isBanned = !!data?.banned_chat_reason;
+    // Update cache
+    this.bannedChatCache.set(userId, isBanned);
+
+    return isBanned;
   }
 
   /**
@@ -292,7 +308,7 @@ export default class ChatServer implements Party.Server {
         const isBanned = await this.isUserBanned(currentState.userId);
 
         // Create the new ChatMessage
-        const newMessage: ChatMessage = {
+        const newMessage: ChatMessageStorage = {
           type: "chat",
           from: username,
           text,
@@ -322,13 +338,15 @@ export default class ChatServer implements Party.Server {
               user_id: currentState.userId,
               banned_chat_reason: "Exceeded maximum warnings",
             });
+            // Update the cache
+            this.bannedChatCache.set(currentState.userId, true);
           }
           return;
         }
 
         // If not flagged => store + broadcast
         const messages =
-          (await this.room.storage.get<ChatMessage[]>("messages")) ?? [];
+          (await this.room.storage.get<ChatMessageStorage[]>("messages")) ?? [];
         messages.push(newMessage);
         // prune older messages
         if (messages.length > MAX_MESSAGES) {
@@ -413,7 +431,7 @@ export default class ChatServer implements Party.Server {
         await this.room.storage.put("messages", []);
 
         // Notify all users that messages have been cleared
-        const systemMsg: ChatMessage = {
+        const systemMsg: ChatMessageStorage = {
           type: "chat",
           from: "System",
           text: "All messages have been cleared by an administrator.",
@@ -440,7 +458,7 @@ export default class ChatServer implements Party.Server {
         await this.broadcastScoreboard();
 
         // Notify all users that the leaderboard has been cleared
-        const systemMsg: ChatMessage = {
+        const systemMsg: ChatMessageStorage = {
           type: "chat",
           from: "System",
           text: "The leaderboard has been cleared by an administrator.",
