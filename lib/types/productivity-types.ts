@@ -44,6 +44,11 @@ export interface ProductivityBlock {
    * we could store the fraction here to weigh the score.
    */
   activeRatio?: number;
+
+  /**
+   * Description of the block from the AI.
+   */
+  aiDescription?: string;
 }
 
 /**

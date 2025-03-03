@@ -35,6 +35,7 @@ import {
   updateUserScore,
 } from "@/app/actions/productivity-actions";
 import { classifyBlock } from "@/app/actions/classify-actions";
+import { summarizeText } from "@/app/actions/summarize-actions";
 
 /**
  * A convenience hook to unify the entire "pull data -> classify -> score" flow.
@@ -55,7 +56,10 @@ export function useProductivityTracker() {
    *
    * If successful, updates local state with fresh blocks and new total score.
    */
-  async function classifyAndScoreAllBlocks(role: string = "I'm a developer") {
+  async function classifyAndScoreAllBlocks(
+    role: string = "I'm a developer",
+    limit?: number
+  ) {
     setLoading(true);
     setError(null);
 

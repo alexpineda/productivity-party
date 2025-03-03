@@ -19,13 +19,9 @@ import { OpenAI } from "openai";
 export async function moderateMessage(text: string): Promise<boolean> {
   try {
     // Get settings to determine which API key to use
-    // const settings = await pipe.settings.getAll();
 
     // Decide which key to use
     const apiKey = process.env.PARTYKIT_OPENAI_API_KEY;
-    // settings.aiProviderType === "screenpipe-cloud"
-    //   ? settings?.user?.token
-    //   : settings?.openaiApiKey;
 
     if (!apiKey) {
       console.warn("No API key available for moderation, skipping check");

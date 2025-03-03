@@ -9,35 +9,42 @@ import { classifyBlock } from "@/app/actions/classify-actions";
 import { appendToLog } from "@/lib/utilities/log-utils";
 import type { ProductivityBlock } from "@/lib/types/productivity-types";
 import { pipe } from "@screenpipe/js";
+import { PRODUCTIVITY_SCORE_UPDATE_INTERVAL } from "@/config";
 
 // export const runtime = "nodejs";
 
 // Mock function for testing
 async function getMockProductivityData(): Promise<ProductivityBlock[]> {
   const now = new Date();
-  const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
-  const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
-  const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+  const thirdIntervalAgo = new Date(
+    now.getTime() - PRODUCTIVITY_SCORE_UPDATE_INTERVAL * 3 * 60 * 1000
+  );
+  const secondIntervalAgo = new Date(
+    now.getTime() - PRODUCTIVITY_SCORE_UPDATE_INTERVAL * 2 * 60 * 1000
+  );
+  const lastIntervalAgo = new Date(
+    now.getTime() - PRODUCTIVITY_SCORE_UPDATE_INTERVAL * 60 * 1000
+  );
 
-  // Create three 5-minute blocks with mock data
+  // Create three interval blocks with mock data
   return [
     {
-      startTime: fifteenMinutesAgo.toISOString(),
-      endTime: tenMinutesAgo.toISOString(),
+      startTime: thirdIntervalAgo.toISOString(),
+      endTime: secondIntervalAgo.toISOString(),
       contentSummary:
         "Working on React components for the dashboard. Implementing new features.",
       classification: "break", // Will be classified by the caller
       activeRatio: 1,
     },
     {
-      startTime: tenMinutesAgo.toISOString(),
-      endTime: fiveMinutesAgo.toISOString(),
+      startTime: secondIntervalAgo.toISOString(),
+      endTime: lastIntervalAgo.toISOString(),
       contentSummary: "Browsing social media. Checking Twitter and Instagram.",
       classification: "break", // Will be classified by the caller
       activeRatio: 1,
     },
     {
-      startTime: fiveMinutesAgo.toISOString(),
+      startTime: lastIntervalAgo.toISOString(),
       endTime: now.toISOString(),
       contentSummary:
         "Reading documentation about Next.js API routes and server actions.",

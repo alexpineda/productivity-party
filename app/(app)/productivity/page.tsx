@@ -106,22 +106,31 @@ export default function ProductivityPage() {
                 blocks.slice(-3).map((block, i) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between p-2 rounded-lg bg-gray-50"
+                    className="flex flex-col p-2 rounded-lg bg-gray-50 mb-2"
                   >
-                    <span className="text-sm text-gray-600">
-                      {new Date(block.startTime).toLocaleTimeString()}
-                    </span>
-                    <Badge
-                      variant={
-                        block.classification === "productive"
-                          ? "default"
-                          : block.classification === "break"
-                          ? "secondary"
-                          : "destructive"
-                      }
-                    >
-                      {block.classification}
-                    </Badge>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">
+                        {new Date(block.startTime).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      <Badge
+                        variant={
+                          block.classification === "productive"
+                            ? "default"
+                            : block.classification === "break"
+                            ? "secondary"
+                            : "destructive"
+                        }
+                      >
+                        {block.classification}
+                      </Badge>
+                    </div>
+                    {/* Display the short AI summary */}
+                    <p className="text-xs text-gray-700 mt-1 italic">
+                      {block.aiDescription || "No summary."}
+                    </p>
                   </div>
                 ))
               )}

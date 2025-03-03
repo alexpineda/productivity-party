@@ -123,6 +123,30 @@ export default function LeaderboardPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {userRank > 0 && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 rounded-lg border border-blue-100 dark:border-blue-900">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                    Your Current Rank
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    #{userRank} {userRank <= 3 && "🏆"}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                    Your Score
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    {scoreboard
+                      .find((entry) => entry.userId === currentUserId)
+                      ?.score.toLocaleString() || 0}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {scoreboard.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Trophy className="h-12 w-12 mx-auto mb-3 opacity-20" />
@@ -183,49 +207,6 @@ export default function LeaderboardPage() {
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle className="text-xl">Set Your Score</CardTitle>
-          <CardDescription>
-            Enter a score for yourself and click &ldquo;Update Score&rdquo; to
-            see it appear on the global leaderboard. You must have your name set
-            in the chat or profile for it to display properly.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-            <div>
-              {userRank > 0 && (
-                <div className="text-sm text-gray-500 mb-2">
-                  Your current rank:{" "}
-                  <span className="font-medium">{userRank}</span> of{" "}
-                  {scoreboard.length}
-                </div>
-              )}
-              <div className="flex gap-2 items-center">
-                <Input
-                  type="number"
-                  value={userScore}
-                  onChange={(e) =>
-                    setUserScore(parseInt(e.target.value, 10) || 0)
-                  }
-                  className="w-[120px]"
-                  min="0"
-                />
-                <Button
-                  onClick={() => {
-                    setScore(userScore);
-                  }}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                >
-                  Update Score
-                </Button>
-              </div>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

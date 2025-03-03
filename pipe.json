@@ -4,5 +4,7 @@
       "path": "/api/calcscore",
       "schedule": "0 */5 * * * *"
     }
-  ]
+  ],
+  "enabled": true,
+  "is_nextjs": true
 }

@@ -3,10 +3,7 @@
  * @param message The message to append to the log
  * @param logFileName Optional custom log file name, defaults to 'app.log'
  */
-export const appendToLog = async (
-  message: string | object,
-  logFileName: string = "app.log"
-): Promise<void> => {
+export const appendToLog = async (message: string | object): Promise<void> => {
   // Only log in debug environment
   if (process.env.NODE_ENV !== "development") {
     return;
@@ -22,7 +19,7 @@ export const appendToLog = async (
     const formattedMessage =
       typeof message === "object" ? JSON.stringify(message) : message;
     const logMessage = `[${timestamp}] ${formattedMessage}\n`;
-    const logPath = path.join(process.cwd(), logFileName);
+    const logPath = path.join(process.cwd(), "app.log");
 
     fs.appendFileSync(logPath, logMessage);
   } catch (error) {

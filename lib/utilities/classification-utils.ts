@@ -13,6 +13,7 @@
  */
 
 import type { ContentItem } from "@screenpipe/js";
+import { PRODUCTIVITY_SCORE_UPDATE_INTERVAL } from "@/config";
 
 /**
  * A helper interface to represent items grouped in a time-based block.
@@ -34,7 +35,7 @@ interface PartitionedBlock {
  */
 export function partitionIntoBlocks(
   items: ContentItem[],
-  blockDurationMins: number = 5
+  blockDurationMins: number = PRODUCTIVITY_SCORE_UPDATE_INTERVAL
 ): PartitionedBlock[] {
   if (!items || items.length === 0) return [];
 

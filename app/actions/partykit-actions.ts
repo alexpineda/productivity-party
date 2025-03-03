@@ -10,6 +10,7 @@ Created updatePartyKitScore function to update the user's productivity score in 
 "use server";
 
 import { pipe } from "@screenpipe/js";
+import { PARTYKIT_SERVER_URL } from "@/config";
 
 /**
  * @function updatePartyKitScore
@@ -27,14 +28,7 @@ export async function updatePartyKitScore(score: number): Promise<boolean> {
   try {
     // Get the PartyKit host from environment or use localhost for development
     const isDev = process.env.NODE_ENV !== "production";
-    const host = isDev
-      ? "localhost:1999"
-      : process.env.NEXT_PUBLIC_PARTYKIT_HOST;
-
-    if (!host) {
-      console.error("NEXT_PUBLIC_PARTYKIT_HOST is not set");
-      return false;
-    }
+    const host = PARTYKIT_SERVER_URL;
 
     // Get the user's settings to retrieve their user ID
     const settings = await pipe.settings.getAll();

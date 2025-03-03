@@ -23,12 +23,12 @@
 import { useEffect, useRef, useState } from "react";
 import PartySocket from "partysocket";
 import { usePipeSettings } from "@/hooks/use-pipe-settings";
+import { PARTYKIT_SERVER_URL } from "@/config";
 
-const isDev = process.env.NODE_ENV !== "production";
-const HOST = isDev ? "localhost:1999" : process.env.NEXT_PUBLIC_PARTYKIT_HOST;
+const HOST = PARTYKIT_SERVER_URL;
 
 if (!HOST) {
-  throw new Error("NEXT_PUBLIC_PARTYKIT_HOST is not set");
+  throw new Error("PARTYKIT_SERVER_URL is not set");
 }
 
 // User state in the PartyKit server
@@ -58,7 +58,6 @@ interface DebugStateMessage {
  */
 export function usePartyKitClient() {
   const { settings } = usePipeSettings();
-
   const [socket, setSocket] = useState<PartySocket | null>(null);
 
   // Connect once on mount
@@ -75,7 +74,15 @@ export function usePartyKitClient() {
 
     ws.addEventListener("open", () => {
       // As soon as the socket opens, send the user ID to the PartyKit server
-      ws.send(JSON.stringify({ type: "hello", userId }));
+      ws.send(
+        JSON.stringify({
+          type: "hello",
+          userId,
+          role: settings.role,
+          nickname: settings.nickname,
+          currentTask: settings.currentTask,
+        })
+      );
     });
 
     setSocket(ws);

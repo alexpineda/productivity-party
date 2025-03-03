@@ -16,8 +16,8 @@
  *    - scoreboard is stored in room.storage, ephemeral
  * 3. ephemeral ConnectionState:
  *    - username: string
- *    - score: number
  *    - task: string
+ *    - role: string
  *    - warningCount: number (times they've posted flagged content)
  *    - shadowBanned: boolean (true if they've exceeded flagged content threshold)
  *
@@ -59,7 +59,6 @@ interface DebugStateMessage {
 interface ConnectionState {
   userId: string;
   username: string;
-  score: number;
   task: string;
   role: string;
   warningCount: number; // how many flagged messages
@@ -97,9 +96,8 @@ export default class ChatServer implements Party.Server {
     // Set default ephemeral user state
     connection.setState({
       username: "Anonymous",
-      score: 0,
-      task: "none",
-      role: "none",
+      task: "",
+      role: "",
       warningCount: 0,
       shadowBanned: false,
       userId: connection.id,
@@ -154,14 +152,13 @@ export default class ChatServer implements Party.Server {
     if (data.type === "hello") {
       if (data.userId) {
         const currentState = sender.state || {
-          username: "Anonymous",
-          score: 0,
-          task: "",
-          role: "",
+          username: data.nickname || "Anonymous",
+          task: data.currentTask || "",
+          role: data.role || "",
           warningCount: 0,
           shadowBanned: false,
-          userId: sender.id,
-          hasSetValidUserId: false,
+          userId: data.userId,
+          hasSetValidUserId: true,
         };
 
         sender.setState({
@@ -169,19 +166,6 @@ export default class ChatServer implements Party.Server {
           userId: data.userId,
           hasSetValidUserId: true, // Mark that a valid userId has been set
         });
-
-        // Now send back ephemeral user state + scoreboard + anything else you want:
-        const scoreboard =
-          (await this.room.storage.get<ScoreboardEntry[]>("scoreboard")) ?? [];
-        const userProfile = sender.state; // ephemeral user state
-
-        sender.send(
-          JSON.stringify({
-            type: "init_sync",
-            userProfile,
-            scoreboard,
-          })
-        );
 
         console.log("onConnect", sender.id, data.userId);
       }
@@ -203,16 +187,6 @@ export default class ChatServer implements Party.Server {
 
     // Process other message types only if a valid userId has been set
     switch (data.type) {
-      case "set_name": {
-        // ephemeral rename
-        const currentState = sender.state!; // We know this exists because we checked hasValidUserId
-        sender.setState({
-          ...currentState,
-          username: data.name || "Anonymous",
-        });
-        break;
-      }
-
       case "update_profile": {
         // Update user profile (name, task, role)
         const currentState = sender.state!;
@@ -315,12 +289,6 @@ export default class ChatServer implements Party.Server {
         const userId = currentState.userId; // Use the userId from state, not from the message
         const newScore = typeof data.score === "number" ? data.score : 0;
 
-        // update ephemeral connection state
-        sender.setState({
-          ...currentState,
-          score: newScore,
-        });
-
         // update scoreboard in ephemeral storage
         const scoreboard =
           (await this.room.storage.get<ScoreboardEntry[]>("scoreboard")) ?? [];
@@ -368,8 +336,8 @@ export default class ChatServer implements Party.Server {
           id,
           state: (conn.state as ConnectionState) || {
             username: "Unknown",
-            score: 0,
             task: "none",
+            role: "",
             warningCount: 0,
             shadowBanned: false,
             userId: id,

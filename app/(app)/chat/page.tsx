@@ -74,7 +74,7 @@ export default function ChatPage() {
   const socketRef = useRef<PartySocket | null>(null);
 
   // from usePartyKitClient
-  const { socket, setName, sendChat } = usePartyKitClient();
+  const { socket, sendChat } = usePartyKitClient();
 
   // Keep a scroll ref for chat history
   const chatEndRef = useRef<HTMLDivElement | null>(null);

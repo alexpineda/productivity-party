@@ -24,7 +24,6 @@
  */
 
 "use server";
-
 import { pipe } from "@screenpipe/js";
 import type { ProductivityBlock } from "@/lib/types/productivity-types";
 import {
@@ -33,39 +32,52 @@ import {
 } from "@/lib/utilities/classification-utils";
 import { updatePartyKitScore } from "./partykit-actions";
 import { appendToLog } from "@/lib/utilities/log-utils";
+import {
+  PRODUCTIVITY_SCORE_UPDATE_INTERVAL,
+  SCREENPIPE_API_URL,
+} from "@/config";
 
 /**
  * Fetch the last 15 minutes of screen usage from Screenpipe (OCR + UI),
  * partition it into 5-minute blocks, chunk text, and return as ProductivityBlock[].
  *
- * This was created for Step 5: "Screen Data Retrieval & Distillation."
- * Currently defaults classification to "break"; see classification steps for details.
+ * This version uses the HTTP API directly instead of the SDK.
  *
  * @returns Promise<ProductivityBlock[]>
  * @throws If screenpipe query fails or if there's a parsing error
  */
 export async function getProductivityData(): Promise<ProductivityBlock[]> {
-  // Calculate time range: last 15 minutes
   const now = new Date();
-  const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+  const timeRangeAgo = new Date(
+    now.getTime() - PRODUCTIVITY_SCORE_UPDATE_INTERVAL * 60 * 1000
+  );
 
-  appendToLog("getProductivityData: queryScreenpipe");
+  appendToLog("getProductivityData: using HTTP API");
 
   try {
-    // Query screenpipe for combined OCR + UI content
-    const response = await pipe.queryScreenpipe({
-      contentType: "ocr",
-      startTime: fifteenMinutesAgo.toISOString(),
-      endTime: now.toISOString(),
-      limit: 1000,
-      includeFrames: false,
+    // Query screenpipe's /search endpoint directly
+    const searchParams = new URLSearchParams({
+      content_type: "ocr",
+      start_time: timeRangeAgo.toISOString(),
+      end_time: now.toISOString(),
+      limit: "1000",
     });
 
-    if (!response || !response.data) {
+    const response = await fetch(
+      `${SCREENPIPE_API_URL}/search?${searchParams}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data || !data.data) {
       return [];
     }
 
-    const { data: contentItems } = response;
+    const { data: contentItems } = data;
 
     // Partition into 5-minute blocks
     const partitionedBlocks = partitionIntoBlocks(contentItems, 5);
@@ -94,20 +106,18 @@ export async function getProductivityData(): Promise<ProductivityBlock[]> {
           startTime: block.startTime,
           endTime: block.endTime,
           contentSummary,
-          // Default classification is 'break' for now (Step 5).
+          // Default classification is 'break' for now
           classification: "break",
           // We assume 100% active ratio for demonstration
           activeRatio: 1,
-        };
+          aiDescription: "",
+        } satisfies ProductivityBlock;
       }
     );
 
     return productivityBlocks;
   } catch (error) {
-    appendToLog(
-      "getProductivityData: error retrieving screen usage",
-      String(error)
-    );
+    appendToLog("getProductivityData: error retrieving screen usage");
     throw new Error(`Failed to fetch or process screen data: ${String(error)}`);
   }
 }
