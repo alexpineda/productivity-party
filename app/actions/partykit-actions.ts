@@ -4,6 +4,7 @@ Contains server actions for interacting with the PartyKit server.
 </ai_context>
 <recent_changes>
 Created updatePartyKitScore function to update the user's productivity score in the PartyKit server.
+Added getUserScore function to fetch the user's current score from the PartyKit server.
 </recent_changes>
 */
 
@@ -64,5 +65,56 @@ export async function updatePartyKitScore(delta: number): Promise<boolean> {
   } catch (error) {
     console.error("Error updating PartyKit score:", error);
     return false;
+  }
+}
+
+/**
+ * @function getUserScore
+ * @description
+ * Server action that fetches the user's current score from the PartyKit server.
+ * 
+ * @returns Promise<number> The user's current score, or 0 if there was an error
+ * 
+ * @example
+ * const score = await getUserScore(); // Get current user's score
+ */
+export async function getUserScore(): Promise<number> {
+  try {
+    // Get the PartyKit server URL from config
+    const partyKitUrl = PARTYKIT_SERVER_URL;
+
+    // Get the user's settings to retrieve their user ID
+    const settings = await pipe.settings.getAll();
+    const userId = settings.customSettings?.userId || settings.user?.id;
+
+    if (!userId) {
+      console.error("No user ID found in settings");
+      return 0;
+    }
+
+    // Construct the URL for the PartyKit server with query parameters
+    const url = new URL(`${partyKitUrl}/party/chat`);
+    url.searchParams.append("type", "get_user_score");
+    url.searchParams.append("userId", userId);
+
+    // Send a GET request to the PartyKit server
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+      },
+    });
+
+    if (!response.ok) {
+      console.error("Failed to fetch user score:", await response.text());
+      return 0;
+    }
+
+    const data = await response.json();
+    return data.score || 0;
+  } catch (error) {
+    console.error("Error fetching user score:", error);
+    return 0;
   }
 }

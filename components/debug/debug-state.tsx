@@ -149,7 +149,7 @@ export function DebugState() {
     // Clear local productivity blocks and reset score
     updateSettings({
       ...settings,
-      productivityBlocks: [],
+      processedBlocks: [], // Use the correct key from PipeSettings
       productivityScore: 0,
     });
 

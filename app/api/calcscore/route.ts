@@ -22,20 +22,15 @@ export async function GET(request: NextRequest) {
     const userRole = settings.customSettings?.pipe?.role || "I'm a developer"; // Default to developer if no role set
     const currentScore = settings.customSettings?.productivityScore || 0;
 
-    // Process all unprocessed blocks and get the results
-    const result = await processAndScoreNewBlocks(userRole, 3);
+    // Process all unprocessed blocks
+    await processAndScoreNewBlocks(userRole, 3);
     
-    // If no blocks were processed, include the current score in the response
-    if (result.processedBlockCount === 0) {
-      return NextResponse.json({
-        ...result,
-        message: "No new blocks to process",
-        currentScore
-      });
-    }
-    
-    // Return the processing results
-    return NextResponse.json(result);
+    // Return a simple success response with the current score
+    return NextResponse.json({
+      success: true,
+      message: "Blocks processed successfully",
+      currentScore
+    });
   } catch (error: any) {
     console.error("calcscore route error:", error);
     appendToLog(`calcscore API error: ${error.message}`);

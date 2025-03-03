@@ -4,6 +4,7 @@ The main onboarding page that introduces users to the app and guides them throug
 </ai_context>
 <recent_changes>
 Fixed linter errors by escaping apostrophes.
+Added a prominent note about OpenAI API requirement.
 </recent_changes>
 */
 
@@ -25,6 +26,7 @@ import {
   Trophy,
   MessageCircle,
   ChartLine,
+  AlertCircle,
 } from "lucide-react";
 
 export default function OnboardingPage() {
@@ -39,6 +41,19 @@ export default function OnboardingPage() {
           Track your productivity, compete with others, and stay motivated in a
           fun, social environment.
         </p>
+      </div>
+
+      {/* API Requirement Note */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-8 flex items-start gap-3">
+        <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div>
+          <h3 className="font-medium text-amber-800">Important Note</h3>
+          <p className="text-sm text-amber-700">
+            This application only works with the OpenAI API. Please ensure you
+            have a valid OpenAI API key (or ScreenPipe credits) configured in
+            your settings.
+          </p>
+        </div>
       </div>
 
       {/* Getting Started Steps */}

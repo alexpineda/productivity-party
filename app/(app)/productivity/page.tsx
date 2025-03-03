@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useProductivityTracker } from "@/hooks/use-productivity-tracker";
 import {
   Card,
@@ -27,29 +27,54 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { usePipeSettings } from "@/hooks/use-pipe-settings";
+import { PRODUCTIVITY_SCORE_UPDATE_INTERVAL } from "@/config";
+import { getUserScore } from "@/app/actions/partykit-actions";
 
 export default function ProductivityPage() {
   const { settings } = usePipeSettings();
   const {
     blocks,
-    score,
+    score: localScore,
     loading,
     error,
     refreshProductivityData,
     fetchHistoricalData,
   } = useProductivityTracker();
+  const [serverScore, setServerScore] = useState<number | null>(null);
+  const [isLoadingScore, setIsLoadingScore] = useState(false);
 
+  // Use server score if available, otherwise fall back to local score
+  const displayScore = serverScore !== null ? serverScore : localScore;
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!settings) return;
 
     // Fetch historical data on component mount
     // This only retrieves data for display, doesn't trigger scoring
     fetchHistoricalData();
+    
+    // Fetch the user's score from the server
+    fetchUserScore();
   }, [settings]);
+
+  // Function to fetch the user's score from the server
+  const fetchUserScore = async () => {
+    setIsLoadingScore(true);
+    try {
+      const score = await getUserScore();
+      setServerScore(score);
+    } catch (err) {
+      console.error("Failed to fetch user score from server:", err);
+    } finally {
+      setIsLoadingScore(false);
+    }
+  };
 
   // Handle manual refresh button click
   const handleRefresh = () => {
     refreshProductivityData();
+    fetchUserScore(); // Also refresh the server score
   };
 
   return (
@@ -78,13 +103,13 @@ export default function ProductivityPage() {
           <CardContent>
             <div className="flex flex-col gap-4">
               <div className="text-4xl font-bold text-center bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                {score}
+                {isLoadingScore ? "Loading..." : displayScore}
               </div>
-              <Progress value={Math.min(100, Math.max(0, score))} />
+              <Progress value={Math.min(100, Math.max(0, displayScore))} />
               {process.env.NODE_ENV === "development" && (
                 <Button
                   onClick={handleRefresh}
-                  disabled={loading}
+                  disabled={loading || isLoadingScore}
                   className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
                 >
                   <RefreshCcw className="mr-2 h-4 w-4" />
@@ -196,6 +221,16 @@ export default function ProductivityPage() {
                 decreases with unproductive ones. Breaks are neutral. The more
                 consistent you are with productive work, the higher your score
                 will climb!
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-4">
+              <h3 className="font-semibold mb-2">Extra notes</h3>
+              <p className="text-sm text-gray-600">
+                The score is dependent on the ai classifying the blocks.
+                Sometimes it may get it wrong, and that&apos;s ok! Blocks are
+                processed every {PRODUCTIVITY_SCORE_UPDATE_INTERVAL} minutes, so
+                you may not see an immediate change in your score. If you close
+                the app, and re-open, only the last 3 blocks will be analyzed.
               </p>
             </div>
           </div>

@@ -23,7 +23,7 @@
 
 import { useState, useEffect } from "react";
 import type { ProductivityBlock } from "@/lib/types/productivity-types";
-import { getProductivityData } from "@/app/actions/productivity-actions";
+import { getProcessedBlocks } from "@/app/actions/productivity-actions";
 import { usePipeSettings } from "@/hooks/use-pipe-settings";
 
 /**
@@ -50,16 +50,22 @@ export function useProductivityTracker() {
 
   /**
    * Fetch historical productivity data for display purposes
-   * This includes both processed and unprocessed blocks
+   * This only fetches already processed blocks from settings
    */
   async function fetchHistoricalData(lookbackIntervals: number = 7) {
     setLoading(true);
     setError(null);
 
     try {
-      // Fetch all productivity data (processed and unprocessed)
-      const historicalBlocks = await getProductivityData(lookbackIntervals);
-      setBlocks(historicalBlocks);
+      // Only fetch processed blocks from settings, not raw data
+      const processedBlocks = await getProcessedBlocks();
+      // Sort blocks by time (newest first)
+      const sortedBlocks = processedBlocks.sort(
+        (a, b) =>
+          new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+      );
+
+      setBlocks(sortedBlocks);
     } catch (err) {
       console.error("Failed to fetch historical productivity data:", err);
       if (err instanceof Error) {
@@ -82,7 +88,7 @@ export function useProductivityTracker() {
   async function refreshProductivityData(lookbackIntervals: number = 7) {
     try {
       setLoading(true);
-      
+
       // 1. Trigger the calcscore endpoint to process new blocks and update score
       const response = await fetch("/api/calcscore");
       const data = await response.json();
@@ -91,39 +97,43 @@ export function useProductivityTracker() {
       if (data.success) {
         // 2. After processing completes, fetch updated historical data
         await fetchHistoricalData(lookbackIntervals);
-        
+
         // 3. Use the score delta to update our local score state
         if (data.scoreDelta) {
-          setScore(prevScore => prevScore + data.scoreDelta);
+          setScore((prevScore) => prevScore + data.scoreDelta);
         } else if (data.currentScore !== undefined) {
           // If we got a currentScore (no blocks processed case), use that
           setScore(data.currentScore);
         }
-        
+
         // 4. If we got recent blocks, add them to our state
         if (data.recentBlocks && data.recentBlocks.length > 0) {
-          setBlocks(prevBlocks => {
+          setBlocks((prevBlocks) => {
             // Create a map of existing blocks by ID
             const blockMap = new Map(
-              prevBlocks.map(block => [block.id, block])
+              prevBlocks.map((block) => [block.id, block])
             );
-            
+
             // Add new blocks to the map
             data.recentBlocks.forEach((block: ProductivityBlock) => {
               if (block.id) {
-                blockMap.set(block.id, {...block, processed: true});
+                blockMap.set(block.id, { ...block, processed: true });
               }
             });
-            
+
             // Sort blocks by time
-            return Array.from(blockMap.values()).sort((a, b) => 
-              new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+            return Array.from(blockMap.values()).sort(
+              (a, b) =>
+                new Date(b.startTime).getTime() -
+                new Date(a.startTime).getTime()
             );
           });
         }
       } else {
         throw new Error(
-          data.message || data.error || "Failed to recalculate productivity score"
+          data.message ||
+            data.error ||
+            "Failed to recalculate productivity score"
         );
       }
     } catch (err) {

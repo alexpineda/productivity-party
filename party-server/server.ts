@@ -733,10 +733,46 @@ export default class ChatServer implements Party.Server {
    * This allows server-to-server communication without a WebSocket connection.
    *
    * Currently supports:
-   * - POST with { type: "set_score", userId: string, score: number }
+   * - POST with { type: "update_score", userId: string, delta: number }
+   * - GET with { type: "get_user_score", userId: string }
    */
   async onRequest(req: Party.Request): Promise<Response> {
-    // Only allow POST requests
+    // Handle GET requests for scores
+    if (req.method === "GET") {
+      const url = new URL(req.url);
+      const type = url.searchParams.get("type");
+      const userId = url.searchParams.get("userId");
+
+      if (type === "get_user_score" && userId) {
+        const db = await createServiceClient();
+        const month = this.getCurrentMonth();
+        
+        const { data } = await db
+          .from("scoreboard")
+          .select("score")
+          .eq("user_id", userId)
+          .eq("month", month)
+          .single();
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            score: data?.score || 0
+          }), 
+          {
+            status: 200,
+            headers: { 
+              "Content-Type": "application/json",
+              "Cache-Control": "no-cache"
+            },
+          }
+        );
+      }
+      
+      return new Response("Invalid request", { status: 400 });
+    }
+    
+    // Handle POST requests
     if (req.method !== "POST") {
       return new Response("Method not allowed", { status: 405 });
     }

@@ -187,9 +187,9 @@ export async function getUnprocessedBlocks(
     // 1. Get all productivity blocks
     const allBlocks = await getProductivityData(lookBackIntervals);
 
-    // 2. Filter out already processed blocks, and ensure all blocks have content
+    // 2. Filter out already processed blocks, and ensure all blocks have content to process
     return allBlocks.filter(
-      (block) => !block.processed && block.contentSummary
+      (block) => !block.processed && !!block.contentSummary
     );
   } catch (error) {
     appendToLog("getUnprocessedBlocks: error filtering unprocessed blocks");
@@ -353,9 +353,9 @@ function mergeProductivityBlocks(
     }
   });
 
-  // Convert map back to array and sort by time
+  // Convert map back to array and sort by time (newest first)
   return Array.from(blockMap.values()).sort(
-    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
   );
 }
 
@@ -417,8 +417,13 @@ export async function updateUserScore(
       const newProcessedBlocks = processedBlocks
         .filter((block) => !!block.id)
         .map((block) => ({
-          ...block,
+          id: block.id,
+          startTime: block.startTime,
+          endTime: block.endTime,
+          classification: block.classification,
+          activeRatio: block.activeRatio,
           processed: true,
+          // Important: Do NOT store contentSummary in settings
         }));
 
       // Merge them and de-duplicate by block.id

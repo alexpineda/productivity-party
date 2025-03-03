@@ -104,7 +104,7 @@ export default function LeaderboardPage() {
         </h1>
         <p className="text-gray-500 max-w-xl mx-auto">
           Compete with others and climb the ranks! Update your score to see
-          where you stand.
+          where you stand. The scoreboard resets at the beginning of each month.
         </p>
       </div>
 

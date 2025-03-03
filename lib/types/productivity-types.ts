@@ -55,8 +55,9 @@ export interface ProductivityBlock {
 
   /**
    * Optional text or aggregated screen data used in classification.
+   * This is only used during processing and should not be stored long-term.
    */
-  contentSummary: string;
+  contentSummary?: string;
 
   /**
    * Result of the LLM classification, typically:
