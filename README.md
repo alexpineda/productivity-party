@@ -1,36 +1,48 @@
-# screenpipe playground
+# Party-Pipe
 
-a flexible playground for displaying, testing, and exploring components with their associated code, documentation, and ai prompts.
+A real-time collaboration and productivity tracking platform powered by PartyKit server and Screenpipe.
 
 <!-- <img width="1312" alt="screenshot of component playground" src="https://github.com/user-attachments/assets/3e5abd07-0a3c-4c3b-8351-5107beb4fb10"> -->
 
-## features
+## Features
 
-- **interactive component display**: view rendered components in action
-- **code inspection**: examine the full source code of each component
-- **raw output**: see the raw api responses and data
-- **ai prompt visibility**: view the prompts and context used to generate components
-- **collapsible interface**: toggle component visibility for a cleaner workspace
+- **Real-time collaboration**: Connected experiences via PartyKit server
+- **Productivity tracking**: Monitor and classify productivity metrics
+- **Leaderboard**: Track achievements and scores
+- **Chat**: Real-time messaging between users
+- **Debug tools**: Server health monitoring and diagnostics
+- **Server Health Monitoring**: Track PartyKit server status, connections, and performance
 
-## usage
+## Components
 
-the playground allows you to:
+### Client-Side
 
-1. view rendered components in their intended state
-2. inspect the raw output from api calls
-3. study the complete component code
-4. examine the ai prompts and context used to generate components
+- Next.js application with React components
+- Real-time data hooks and utilities
+- Productivity classification and tracking
+- UI components for displaying server health and status
 
-## component structure
+### Server-Side
 
-each playground card includes:
-- component title and collapsible interface
-- tabs for different views (rendered output, raw output, code, ai prompt)
-- copy functionality for sharing prompts and context
+- PartyKit server for real-time functionality
+- Health check endpoint for monitoring
+- Connection management and state synchronization
+- TTL cache for efficient data storage
 
-## getting started
+## Getting Started
 
-1. install this pipe from UI and play with it
-2. follow docs to create your pipe (it will create this app) (https://docs.screenpi.pe/docs/plugins)
-3. modify code from ready-to-use-examples directory
+1. Install dependencies: `npm install`
+2. Start development servers:
+   - Next.js: `npm run dev`
+   - PartyKit: `npm run partykit:dev`
+   - Both: `npm run dev:all`
+3. Access the debug tools at `/debug` to monitor server health and status
 
+## Development
+
+Check the `CLAUDE.md` file for detailed development guidelines including:
+
+- Build commands
+- Code style guidelines
+- Project structure
+- Testing procedures
