@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 // Client component for displaying settings
 import SettingsDisplay from "./_components/settings-display";
 import { DebugState } from "@/components/debug/debug-state";
+import { PartyServerHealth } from "./_components/party-server-health";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -43,6 +44,7 @@ export default async function DebugPage() {
           <TabsTrigger value="custom">Custom Settings</TabsTrigger>
           <TabsTrigger value="user">User Info</TabsTrigger>
           <TabsTrigger value="partykit">PartyKit</TabsTrigger>
+          <TabsTrigger value="health">Server Health</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="mt-4">
@@ -103,6 +105,12 @@ export default async function DebugPage() {
               </Suspense>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="health" className="mt-4">
+          <Suspense fallback={<div>Loading health information...</div>}>
+            <PartyServerHealth />
+          </Suspense>
         </TabsContent>
       </Tabs>
     </div>

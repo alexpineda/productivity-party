@@ -5,6 +5,7 @@ Contains server actions for interacting with the PartyKit server.
 <recent_changes>
 Created updatePartyKitScore function to update the user's productivity score in the PartyKit server.
 Added getUserScore function to fetch the user's current score from the PartyKit server.
+Added getPartyServerHealth function to check the health of the PartyKit server.
 </recent_changes>
 */
 
@@ -72,9 +73,9 @@ export async function updatePartyKitScore(delta: number): Promise<boolean> {
  * @function getUserScore
  * @description
  * Server action that fetches the user's current score from the PartyKit server.
- * 
+ *
  * @returns Promise<number> The user's current score, or 0 if there was an error
- * 
+ *
  * @example
  * const score = await getUserScore(); // Get current user's score
  */
@@ -116,5 +117,75 @@ export async function getUserScore(): Promise<number> {
   } catch (error) {
     console.error("Error fetching user score:", error);
     return 0;
+  }
+}
+
+/**
+ * Interface for PartyKit server health response
+ */
+export interface PartyServerHealth {
+  status: string;
+  timestamp: number;
+  connections: number;
+  memory?: {
+    scoreboardCacheSize: number;
+    messagesQueueSize: number;
+    rateLimitersCount: number;
+  };
+  error?: string;
+}
+
+/**
+ * @function getPartyServerHealth
+ * @description
+ * Server action that checks the health of the PartyKit server.
+ * This is useful for monitoring the server's status and performance.
+ *
+ * @returns Promise<PartyServerHealth> Object containing health information
+ *
+ * @example
+ * const health = await getPartyServerHealth();
+ * console.log(`Server status: ${health.status}, Connections: ${health.connections}`);
+ */
+export async function getPartyServerHealth(): Promise<PartyServerHealth> {
+  try {
+    // Get the PartyKit server URL from config
+    const partyKitUrl = PARTYKIT_SERVER_URL;
+
+    // Construct the URL for the health endpoint
+    const url = `${partyKitUrl}/party/health`;
+
+    console.log("Checking PartyKit server health at:", url);
+    // Send a GET request to the health endpoint
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+      },
+      // Add a short timeout to avoid hanging if the server is down
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      console.error("Failed to fetch server health:", await response.text());
+      return {
+        status: "error",
+        timestamp: Date.now(),
+        connections: 0,
+        error: `HTTP error ${response.status}`,
+      };
+    }
+
+    const healthData: PartyServerHealth = await response.json();
+    return healthData;
+  } catch (error) {
+    console.error("Error checking PartyKit server health:", error);
+    return {
+      status: "error",
+      timestamp: Date.now(),
+      connections: 0,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
