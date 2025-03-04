@@ -1,33 +1,26 @@
-# Productivity Party
+# 🎉 Productivity Party
 
-A real-time collaboration and productivity tracking platform powered by PartyKit server and Screenpipe.
+Welcome to **Productivity Party**, a fun, social way to stay productive while working! Designed especially for tech workers, it features real-time collaboration and a global leaderboard to boost motivation.
 
-<!-- <img width="1312" alt="screenshot of component playground" src="https://github.com/user-attachments/assets/3e5abd07-0a3c-4c3b-8351-5107beb4fb10"> -->
+## 🌟 Cool Stuff You Can Do
 
-## Features
+- **Work Together, Live**: Feel connected even when you're remote, powered by PartyKit.
+- **Global Leaderboard**: Compete playfully and track your productivity scores against users worldwide.
+- **Chat While You Work**: Socialize and share ideas with real-time chat.
 
-- **Real-time collaboration**: Connected experiences via PartyKit server
-- **Productivity tracking**: Monitor and classify productivity metrics
-- **Leaderboard**: Track achievements and scores
-- **Chat**: Real-time messaging between users
-- **Debug tools**: Server health monitoring and diagnostics
-- **Server Health Monitoring**: Track PartyKit server status, connections, and performance
+## 🛠️ What's Under the Hood?
 
-## Components
+### Frontend
 
-### Client-Side
+- Interactive Next.js and React components
+- Real-time updates and productivity metrics
+- User-friendly UI to monitor productivity and chat
 
-- Next.js application with React components
-- Real-time data hooks and utilities
-- Productivity classification and tracking
-- UI components for displaying server health and status
+### Backend
 
-### Server-Side
-
-- PartyKit server for real-time functionality
-- Health check endpoint for monitoring
-- Connection management and state synchronization
-- TTL cache for efficient data storage
+- PartyKit for real-time chat and edge logic
+- Supabase for leaderboard, user banning, and scoring
+- TTL cache for responsive interactions
 
 ## Getting Started
 
