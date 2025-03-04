@@ -12,7 +12,3 @@ export const PARTYKIT_SERVER_URL = isProduction
 export const PRODUCTIVITY_SCORE_UPDATE_INTERVAL = 5;
 
 export const SCREENPIPE_API_URL = "http://localhost:3030";
-
-export const SUPABASE_URL = isProduction
-  ? process.env.SUPABASE_URL
-  : "http://localhost:54321";
