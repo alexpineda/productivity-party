@@ -132,7 +132,13 @@ export interface PartyServerHealth {
     messagesQueueSize: number;
     rateLimitersCount: number;
   };
+  database?: {
+    status: string;
+    error: string | null;
+  };
   error?: string;
+  env_node?: any;
+  env_partykit?: any;
 }
 
 /**

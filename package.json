@@ -1,5 +1,5 @@
 {
-  "name": "party-pipe",
+  "name": "productivity-party",
   "version": "0.0.2",
   "private": false,
   "scripts": {
@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "login": "npx @screenpipe/dev@latest login",
-    "register": "npx @screenpipe/dev@latest pipe register --name productivity-party --source https://github.com/alexpineda/productivity-party",
+    "register": "npx @screenpipe/dev@latest pipe register --name productivity-party --source https://github.com/alexpineda/productivity-party --discord sophdm",
     "publish": "npx @screenpipe/dev@latest pipe publish --name productivity-party",
     "list-versions": "npx @screenpipe/dev@latest pipe list-versions --name productivity-party",
     "add-components": "npx @screenpipe/dev@latest components add",
@@ -16,8 +16,9 @@
     "db:schema": "node scripts/dump-schema.js",
     "db:schema:simple": "node scripts/simple-schema.js",
     "db:schema:docs": "node scripts/format-schema.js",
-    "partykit:dev": "partykit dev --live",
-    "partykit:deploy": "partykit deploy",
+    "partykit:dev": "partykit dev --live --with-env",
+    "partykit:deploy": "partykit deploy --with-vars",
+    "partykit:tail": "partykit tail",
     "cron:dev": "node scripts/simulate-cron.js",
     "dev:all": "concurrently \"npm run dev\" \"npm run partykit:dev\" \"npm run cron:dev\"",
     "test": "vitest",

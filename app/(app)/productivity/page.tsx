@@ -32,7 +32,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { usePipeSettings } from "@/hooks/use-pipe-settings";
-import { PRODUCTIVITY_SCORE_UPDATE_INTERVAL } from "@/config";
+import { isDevelopment, PRODUCTIVITY_SCORE_UPDATE_INTERVAL } from "@/config";
 import { getUserScore } from "@/app/actions/partykit-actions";
 import { usePartyKitClient } from "@/lib/party-kit/party-kit-client";
 import { PipeSettings } from "@/lib/types/settings-types";
@@ -65,7 +65,7 @@ export default function ProductivityPage() {
     // Fetch historical data on component mount
     // This only retrieves data for display, doesn't trigger scoring
     fetchHistoricalData();
-    
+
     // Fetch the user's score from the server
     fetchUserScore();
 
@@ -75,7 +75,7 @@ export default function ProductivityPage() {
       setCurrentTask(pipeSettings.currentTask || "");
     }
   }, [settings]);
-  
+
   /**
    * onSaveTask
    * @description Handles form submission to save user's current task
@@ -99,8 +99,8 @@ export default function ProductivityPage() {
         // Also update the party server state with current profile data
         const pipeSettings = settings as PipeSettings;
         updateProfile(
-          pipeSettings.nickname || "", 
-          currentTask, 
+          pipeSettings.nickname || "",
+          currentTask,
           pipeSettings.role || ""
         );
 
@@ -246,7 +246,7 @@ export default function ProductivityPage() {
                 {isLoadingScore ? "Loading..." : displayScore}
               </div>
               <Progress value={Math.min(100, Math.max(0, displayScore))} />
-              {process.env.NODE_ENV === "development" && (
+              {isDevelopment && (
                 <Button
                   onClick={handleRefresh}
                   disabled={loading || isLoadingScore}

@@ -739,15 +739,46 @@ export default class ChatServer implements Party.Server {
     if (req.method === "GET" && url.pathname === "/party/health") {
       const connections = Array.from(this.room.getConnections()).length;
 
+      // Check database connection
+      let dbStatus = { status: "unknown", error: null as string | null };
+      try {
+        const db = await createServiceClient();
+        // Simple query to check if the database is accessible
+        const { data, error } = await db
+          .from("scoreboard")
+          .select("user_id, user_name, score, month, region")
+          .eq("month", this.getCurrentMonth())
+          .order("score", { ascending: false });
+        if (error) {
+          dbStatus = { status: "error", error: error.message };
+        } else {
+          dbStatus = { status: "connected", error: null };
+        }
+      } catch (err) {
+        dbStatus = {
+          status: "error",
+          error: err instanceof Error ? err.message : "Unknown database error",
+        };
+      }
+
       return new Response(
         JSON.stringify({
           status: "ok",
           timestamp: Date.now(),
           connections,
+          database: dbStatus,
           memory: {
             scoreboardCacheSize: this.scoreboardCache?.length || 0,
             messagesQueueSize: this.scoreUpdateQueue.size,
             rateLimitersCount: this.messageRateLimits.size,
+          },
+          env_node: {
+            ...process.env,
+            DEV: process.env.NODE_ENV === "development",
+            PROD: process.env.NODE_ENV === "production",
+          },
+          env_partykit: {
+            ...this.room.env,
           },
         }),
         {

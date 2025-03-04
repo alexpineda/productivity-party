@@ -1,3 +1,5 @@
+import { isDevelopment } from "@/config";
+
 /**
  * Appends a message to a local log file
  * @param message The message to append to the log
@@ -5,7 +7,7 @@
  */
 export const appendToLog = async (message: string | object): Promise<void> => {
   // Only log in debug environment
-  if (process.env.NODE_ENV !== "development") {
+  if (isDevelopment) {
     return;
   }
 

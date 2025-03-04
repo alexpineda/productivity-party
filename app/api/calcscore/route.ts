@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { processAndScoreNewBlocks } from "@/app/actions/productivity-actions";
 import { appendToLog } from "@/lib/utilities/log-utils";
 import { pipe } from "@screenpipe/js";
+import { isProduction } from "@/config";
 
 /**
  * GET route handler for /api/calcscore
@@ -11,7 +12,11 @@ import { pipe } from "@screenpipe/js";
  */
 export async function GET(request: NextRequest) {
   try {
-    appendToLog(new Date().toISOString() + " API call: calcscore");
+    appendToLog(
+      new Date().toISOString() +
+        " API call: calcscore " +
+        (isProduction ? "production" : "development")
+    );
 
     // Get user's role from settings
     const settings = await pipe.settings.getAll();
@@ -20,19 +25,22 @@ export async function GET(request: NextRequest) {
 
     // Process all unprocessed blocks
     await processAndScoreNewBlocks(userRole, 3);
-    
+
     // Return a simple success response with the current score
     return NextResponse.json({
       success: true,
       message: "Blocks processed successfully",
-      currentScore
+      currentScore,
     });
   } catch (error: any) {
     console.error("calcscore route error:", error);
     appendToLog(`calcscore API error: ${error.message}`);
-    return NextResponse.json({ 
-      success: false,
-      error: error.message 
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message,
+      },
+      { status: 500 }
+    );
   }
 }
