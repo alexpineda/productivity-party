@@ -196,6 +196,12 @@ export default class ChatServer implements Party.Server {
     return new Date().toISOString().slice(0, 7); // Returns YYYY-MM format
   }
 
+  private async getServiceClient(): Promise<
+    ReturnType<typeof createServiceClient>
+  > {
+    return createServiceClient(this.room);
+  }
+
   private async getScoreboard(): Promise<ScoreboardEntry[]> {
     const now = Date.now();
 
@@ -205,7 +211,7 @@ export default class ChatServer implements Party.Server {
     }
 
     // Otherwise fetch from database
-    const db = await createServiceClient();
+    const db = await this.getServiceClient();
     const month = this.getCurrentMonth();
 
     const { data } = await db
@@ -236,7 +242,7 @@ export default class ChatServer implements Party.Server {
 
   private async updateScore(userId: string, username: string, delta: number) {
     // Get the current scoreboard row
-    const db = await createServiceClient();
+    const db = await this.getServiceClient();
     const month = this.getCurrentMonth();
 
     // fetch existing entry
@@ -248,7 +254,8 @@ export default class ChatServer implements Party.Server {
       .single();
 
     const oldScore = existing?.score ?? 0;
-    const newScore = oldScore + delta;
+    // Ensure score never goes below 0
+    const newScore = Math.max(0, oldScore + delta);
 
     // Queue the score update
     this.scoreUpdateQueue.set(userId, {
@@ -275,7 +282,7 @@ export default class ChatServer implements Party.Server {
     // If queue is empty, do nothing
     if (this.scoreUpdateQueue.size === 0) return;
 
-    const db = await createServiceClient();
+    const db = await this.getServiceClient();
     const month = this.getCurrentMonth();
     const updates = Array.from(this.scoreUpdateQueue.entries());
 
@@ -308,6 +315,7 @@ export default class ChatServer implements Party.Server {
 
     if (upsertData.length === 0) return;
 
+    console.log("Upserting data:", upsertData);
     // Perform the batch upsert
     const { error } = await db.from("scoreboard").upsert(upsertData, {
       onConflict: "user_id,month",
@@ -329,7 +337,7 @@ export default class ChatServer implements Party.Server {
     }
 
     // Cache miss - check database
-    const db = await createServiceClient();
+    const db = await this.getServiceClient();
     const { data } = await db
       .from("banned")
       .select("banned_chat_reason")
@@ -460,7 +468,7 @@ export default class ChatServer implements Party.Server {
 
         // If they have a score, update their username there too
         if (data.name) {
-          const db = await createServiceClient();
+          const db = await this.getServiceClient();
           await db
             .from("scoreboard")
             .update({ user_name: data.name })
@@ -534,7 +542,7 @@ export default class ChatServer implements Party.Server {
           // Check if they exceed threshold => ban them
           if (newCount >= MAX_WARNINGS) {
             // Record the ban in Supabase
-            const db = await createServiceClient();
+            const db = await this.getServiceClient();
             await db.from("banned").upsert({
               user_id: currentState.userId,
               banned_chat_reason: "Exceeded maximum warnings",
@@ -653,7 +661,7 @@ export default class ChatServer implements Party.Server {
          *
          * Clears the leaderboard/scoreboard
          */
-        const db = await createServiceClient();
+        const db = await this.getServiceClient();
         await db
           .from("scoreboard")
           .delete()
@@ -742,7 +750,7 @@ export default class ChatServer implements Party.Server {
       // Check database connection
       let dbStatus = { status: "unknown", error: null as string | null };
       try {
-        const db = await createServiceClient();
+        const db = await this.getServiceClient();
         // Simple query to check if the database is accessible
         const { data, error } = await db
           .from("scoreboard")
@@ -797,7 +805,7 @@ export default class ChatServer implements Party.Server {
       const userId = url.searchParams.get("userId");
 
       if (type === "get_user_score" && userId) {
-        const db = await createServiceClient();
+        const db = await this.getServiceClient();
         const month = this.getCurrentMonth();
 
         const { data } = await db
@@ -848,7 +856,7 @@ export default class ChatServer implements Party.Server {
           }
 
           // Get current username from scoreboard
-          const db = await createServiceClient();
+          const db = await this.getServiceClient();
           const { data: userData } = await db
             .from("scoreboard")
             .select("user_name")

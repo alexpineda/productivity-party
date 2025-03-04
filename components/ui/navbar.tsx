@@ -21,6 +21,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Rocket, PartyPopper } from "lucide-react";
+import { isDevelopment } from "@/config";
 
 /**
  * @interface NavItem
@@ -42,9 +43,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Leaderboard", href: "/leaderboard" },
   { label: "Chat", href: "/chat" },
 ];
-
-// Check if we're in development environment
-const isDevelopment = process.env.NODE_ENV === "development";
 
 /**
  * @function Navbar
@@ -85,19 +83,19 @@ export function Navbar() {
           })}
 
           {/* Debug link - only visible in development */}
-          {isDevelopment && (
-            <li>
-              <Link
-                href="/debug"
-                className={cn(
-                  "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 text-amber-600",
-                  pathname === "/debug" && "bg-gray-100 text-amber-700"
-                )}
-              >
-                Debug
-              </Link>
-            </li>
-          )}
+          {/* {isDevelopment && ( */}
+          <li>
+            <Link
+              href="/debug"
+              className={cn(
+                "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 text-amber-600",
+                pathname === "/debug" && "bg-gray-100 text-amber-700"
+              )}
+            >
+              Debug
+            </Link>
+          </li>
+          {/* )} */}
         </ul>
       </div>
     </nav>

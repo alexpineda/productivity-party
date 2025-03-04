@@ -1,4 +1,4 @@
-# Party-Pipe
+# Productivity Party
 
 A real-time collaboration and productivity tracking platform powered by PartyKit server and Screenpipe.
 

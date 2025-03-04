@@ -13,7 +13,7 @@ import { isProduction } from "@/config";
 export async function GET(request: NextRequest) {
   try {
     appendToLog(
-      new Date().toISOString() +
+      new Date().toLocaleString("en-US", { timeZone: "America/New_York" }) +
         " API call: calcscore " +
         (isProduction ? "production" : "development")
     );
