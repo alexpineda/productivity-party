@@ -5,6 +5,9 @@ export async function createServiceClient(room: Party.Room) {
   const url = room?.env?.SUPABASE_URL as string;
   const key = room?.env?.SUPABASE_SERVICE_ROLE_KEY as string;
 
+  // const url = room?.env?.SUPABASE_DEV_URL as string;
+  // const key = room?.env?.SUPABASE_SERVICE_ROLE_DEV_KEY as string;
+
   // const url = isDevelopment
   //   ? (room?.env?.SUPABASE_DEV_URL as string)
   //   : (room?.env?.SUPABASE_URL as string);

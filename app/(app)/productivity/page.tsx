@@ -300,7 +300,7 @@ export default function ProductivityPage() {
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">
-                        {new Date(block.startTime).toLocaleTimeString([], {
+                        {new Date(block.endTime).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
@@ -348,7 +348,7 @@ export default function ProductivityPage() {
             <div className="rounded-lg bg-gray-50 p-4">
               <h3 className="font-semibold mb-2">🎯 Productivity Tracking</h3>
               <p className="text-sm text-gray-600">
-                Your activity is broken into 15-minute blocks. Each block is
+                Your activity is broken into 5-minute blocks. Each block is
                 classified as either productive (coding, reading docs) or
                 unproductive (social media, entertainment) based on your role
                 and goals. Breaks are tracked separately and don&apos;t affect

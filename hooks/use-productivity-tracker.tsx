@@ -50,19 +50,69 @@ export function useProductivityTracker() {
 
   /**
    * Fetch historical productivity data for display purposes
-   * This only fetches already processed blocks from settings
+   * This fetches processed blocks from settings and ensures current blocks are up-to-date
    */
   async function fetchHistoricalData(lookbackIntervals: number = 7) {
     setLoading(true);
     setError(null);
 
     try {
-      // Only fetch processed blocks from settings, not raw data
+      // Fetch processed blocks from settings
       const processedBlocks = await getProcessedBlocks();
-      // Sort blocks by time (newest first)
-      const sortedBlocks = processedBlocks.sort(
-        (a, b) =>
-          new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+      
+      // Create a current block for the present time period
+      // Round to the current 5-minute interval
+      const now = new Date();
+      
+      // Calculate the current 5-minute block
+      // For the next end time (ceiling), not floor
+      const minutes = now.getMinutes();
+      const nextIntervalMinutes = Math.ceil(minutes / 5) * 5;
+      
+      // Create end time (next 5-minute interval)
+      const endDate = new Date(now);
+      endDate.setMinutes(nextIntervalMinutes, 0, 0);
+      
+      // The start time is 5 minutes before end time
+      const startDate = new Date(endDate);
+      startDate.setMinutes(endDate.getMinutes() - 5);
+      
+      // Format for block ID - uses the start time
+      const year = startDate.getFullYear();
+      const month = String(startDate.getMonth() + 1).padStart(2, '0');
+      const day = String(startDate.getDate()).padStart(2, '0');
+      const hours = String(startDate.getHours()).padStart(2, '0');
+      const mins = String(startDate.getMinutes()).padStart(2, '0');
+      const normalizedTimeStr = `${year}-${month}-${day}T${hours}:${mins}`;
+      
+      // Create a current block with status "in progress"
+      const currentBlock = {
+        id: `block-${normalizedTimeStr}`,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+        classification: {
+          classification: "productive", // Optimistic assumption
+          shortSummary: "Currently tracking...",
+          reason: "This time block is still in progress",
+        },
+        activeRatio: 1,
+        processed: false
+      };
+      
+      // Combine processed blocks with the current block
+      const combinedBlocks = [...processedBlocks, currentBlock];
+      
+      // Sort blocks by time (newest first) and remove duplicates
+      const blockMap = new Map();
+      combinedBlocks.forEach(block => {
+        // If block already exists in map, only replace if the new one is processed
+        if (!blockMap.has(block.id) || block.processed) {
+          blockMap.set(block.id, block);
+        }
+      });
+      
+      const sortedBlocks = Array.from(blockMap.values()).sort(
+        (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
       );
 
       setBlocks(sortedBlocks);

@@ -70,20 +70,21 @@ export async function fetchRawScreenpipeData(
 /**
  * @function convertToProductivityBlocks
  * @description
- * Converts raw content items into productivity blocks with normalized IDs
- * This function handles the logic of creating structured blocks from raw data
+ * Converts raw content items into productivity blocks with normalized IDs.
+ * This function handles the logic of creating structured blocks from raw data.
  */
 export async function convertToProductivityBlocks(
   contentItems: RawContentItem[]
 ): Promise<ProductivityBlock[]> {
   try {
-    // Partition raw content items into 5-minute blocks
+    // Partition raw content items into 5-minute blocks 
+    // This already aligns blocks to local 5-minute intervals (9:00, 9:05, etc.)
     const partitionedBlocks = partitionIntoBlocks(contentItems, 5);
-
+    
     // Convert each partitioned block into a ProductivityBlock
     const productivityBlocks: ProductivityBlock[] = partitionedBlocks.map(
       (block) => {
-        // Create a normalized block ID based on PRODUCTIVITY_SCORE_UPDATE_INTERVAL
+        // Create a block ID using the already aligned startTime
         const blockId = generateBlockId(block.startTime);
 
         // Combine all text from OCR or UI
@@ -311,21 +312,22 @@ export async function processAndScoreNewBlocks(
 }
 
 /**
- * Helper function to generate consistent block IDs
+ * Helper function to generate consistent block IDs from already aligned timestamps
+ * 
+ * Takes a timestamp that's already aligned to 5-minute intervals and formats it
+ * as a block ID string.
  */
-function generateBlockId(timestamp: string): string {
-  const blockDate = new Date(timestamp);
-  const minutes = blockDate.getMinutes();
-  const normalizedMinutes =
-    Math.floor(minutes / PRODUCTIVITY_SCORE_UPDATE_INTERVAL) *
-    PRODUCTIVITY_SCORE_UPDATE_INTERVAL;
-
-  // Create a normalized date with minutes aligned to intervals
-  const normalizedDate = new Date(blockDate);
-  normalizedDate.setMinutes(normalizedMinutes, 0, 0); // zero out seconds and milliseconds
-
-  // Format: YYYY-MM-DDTHH:MM
-  const normalizedTimeStr = normalizedDate.toISOString().slice(0, 16);
+function generateBlockId(startTimeIso: string): string {
+  const d = new Date(startTimeIso);  // already aligned to 5-min intervals in partitionIntoBlocks
+  
+  // Format using local time: YYYY-MM-DDTHH:MM
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const mins = String(d.getMinutes()).padStart(2, '0');
+  
+  const normalizedTimeStr = `${year}-${month}-${day}T${hours}:${mins}`;
   return `block-${normalizedTimeStr}`;
 }
 

@@ -19,7 +19,8 @@ import type { RawContentItem, PartitionedBlock } from "@/lib/types/productivity-
 /**
  * Partition the given ContentItems (frames) into N-minute blocks.
  * We assume the items are from a roughly 15-minute range, but we
- * generate 5-minute slices by default.
+ * generate 5-minute slices by default. Block times are aligned to local
+ * timezone 5-minute boundaries (e.g., 9:00, 9:05, 9:10).
  *
  * This function supports both ContentItem from @screenpipe/js and our internal RawContentItem type
  *
@@ -41,7 +42,7 @@ export function partitionIntoBlocks(
   });
 
   // The earliest item determines the start. The latest item determines the end.
-  const firstTimestamp = new Date(getTimestamp(sortedItems[0])).getTime();
+  const firstTimestamp = new Date(getTimestamp(sortedItems[0]));
   const lastTimestamp = new Date(
     getTimestamp(sortedItems[sortedItems.length - 1])
   ).getTime();
@@ -49,7 +50,13 @@ export function partitionIntoBlocks(
   // We'll iterate in N-minute increments from first to last
   const blockDurationMs = blockDurationMins * 60 * 1000;
 
-  let currentBlockStart = firstTimestamp;
+  // Round the earliest timestamp to local 5-min boundary
+  const startDate = new Date(firstTimestamp);
+  const minutes = startDate.getMinutes();
+  const normalizedMinutes = Math.floor(minutes / blockDurationMins) * blockDurationMins;
+  startDate.setMinutes(normalizedMinutes, 0, 0); // zero out seconds and milliseconds
+  
+  let currentBlockStart = startDate.getTime();
   let blocks: PartitionedBlock[] = [];
 
   while (currentBlockStart <= lastTimestamp) {
@@ -65,8 +72,6 @@ export function partitionIntoBlocks(
       }
     }
 
-    // If blockItems is non-empty, create a partition
-    // Even if empty, we might want to track a block if we are doing break detection.
     blocks.push({
       startTime: new Date(currentBlockStart).toISOString(),
       endTime: new Date(currentBlockEnd).toISOString(),

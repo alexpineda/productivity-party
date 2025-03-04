@@ -83,19 +83,19 @@ export function Navbar() {
           })}
 
           {/* Debug link - only visible in development */}
-          {/* {isDevelopment && ( */}
-          <li>
-            <Link
-              href="/debug"
-              className={cn(
-                "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 text-amber-600",
-                pathname === "/debug" && "bg-gray-100 text-amber-700"
-              )}
-            >
-              Debug
-            </Link>
-          </li>
-          {/* )} */}
+          {isDevelopment && (
+            <li>
+              <Link
+                href="/debug"
+                className={cn(
+                  "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 text-amber-600",
+                  pathname === "/debug" && "bg-gray-100 text-amber-700"
+                )}
+              >
+                Debug
+              </Link>
+            </li>
+          )}
         </ul>
       </div>
     </nav>

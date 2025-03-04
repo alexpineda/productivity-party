@@ -768,12 +768,12 @@ export default class ChatServer implements Party.Server {
             rateLimitersCount: this.messageRateLimits.size,
           },
           env_node: {
-            ...process.env,
-            DEV: process.env.NODE_ENV === "development",
-            PROD: process.env.NODE_ENV === "production",
+            // ...process.env,
+            // DEV: process.env.NODE_ENV === "development",
+            // PROD: process.env.NODE_ENV === "production",
           },
           env_partykit: {
-            ...this.room.env,
+            // ...this.room.env,
           },
         }),
         {
