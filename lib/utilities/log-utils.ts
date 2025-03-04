@@ -7,7 +7,7 @@ import { isDevelopment } from "@/config";
  */
 export const appendToLog = async (message: string | object): Promise<void> => {
   // Only log in debug environment
-  if (isDevelopment) {
+  if (!isDevelopment) {
     return;
   }
 

@@ -64,8 +64,8 @@ export default function ProductivityPage() {
 
     // Fetch historical data on component mount
     // This only retrieves data for display, doesn't trigger scoring
-    // fetchHistoricalData();
-    refreshProductivityData();
+    fetchHistoricalData();
+    // refreshProductivityData();
 
     // Fetch the user's score from the server
     fetchUserScore();
@@ -77,7 +77,8 @@ export default function ProductivityPage() {
     }
 
     const timer = setInterval(() => {
-      refreshProductivityData();
+      fetchHistoricalData();
+      // refreshProductivityData();
       fetchUserScore();
     }, 60_000);
 

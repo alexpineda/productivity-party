@@ -382,19 +382,6 @@ export default class ChatServer implements Party.Server {
     this.messageRateLimits.set(userId, userMessages);
   }
 
-  /**
-   * onMessage
-   * Called when a user sends a message. We parse JSON, then handle it
-   * based on its 'type'.
-   *
-   * Supported types:
-   * - "set_name": user changes display name
-   * - "chat": user sends chat text
-   * - "set_score": user updates their scoreboard score
-   * - "get_debug_state": returns debug information about user state
-   * - "clear_messages": clears all chat messages from storage
-   * - "clear_leaderboard": clears the leaderboard/scoreboard
-   */
   async onMessage(raw: string, sender: Party.Connection<ConnectionState>) {
     // If server is shutting down, reject all messages
     if (this.isShuttingDown) {

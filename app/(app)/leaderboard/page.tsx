@@ -43,13 +43,11 @@ export default function LeaderboardPage() {
 
   // local scoreboard
   const [scoreboard, setScoreboard] = useState<ScoreboardEntry[]>([]);
-  // local user score input
-  const [userScore, setUserScore] = useState<number>(0);
   // Current user ID (would normally come from auth)
   const [currentUserId, setCurrentUserId] = useState<string>("");
 
   // We use a custom hook that returns the PartySocket instance or something similar
-  const { socket, setScore } = usePartyKitClient();
+  const { socket } = usePartyKitClient();
 
   // TODO: load user score from server
 

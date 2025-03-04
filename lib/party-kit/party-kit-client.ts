@@ -112,19 +112,6 @@ export function usePartyKitClient() {
   }
 
   /**
-   * setScore
-   * Sends a "set_score" message to the server
-   */
-  function setScore(newScore: number) {
-    if (!socket) return;
-    const msg = {
-      type: "set_score",
-      score: newScore,
-    };
-    socket.send(JSON.stringify(msg));
-  }
-
-  /**
    * getDebugState
    * Requests debug state information from the server
    * The response will come as a message with type="debug_state"
@@ -171,7 +158,6 @@ export function usePartyKitClient() {
     socket,
     updateProfile,
     sendChat,
-    setScore,
     getDebugState,
     clearMessages,
     clearLeaderboard,
