@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SettingsDisplay from "./_components/settings-display";
 import { DebugState } from "@/components/debug/debug-state";
 import { PartyServerHealth } from "./_components/party-server-health";
+import EnvironmentConfigDisplay from "./_components/environment-config-display";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -45,6 +46,7 @@ export default async function DebugPage() {
           <TabsTrigger value="user">User Info</TabsTrigger>
           <TabsTrigger value="partykit">PartyKit</TabsTrigger>
           <TabsTrigger value="health">Server Health</TabsTrigger>
+          <TabsTrigger value="config">Environment & Config</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="mt-4">
@@ -110,6 +112,12 @@ export default async function DebugPage() {
         <TabsContent value="health" className="mt-4">
           <Suspense fallback={<div>Loading health information...</div>}>
             <PartyServerHealth />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="config" className="mt-4">
+          <Suspense fallback={<div>Loading environment configuration...</div>}>
+            <EnvironmentConfigDisplay />
           </Suspense>
         </TabsContent>
       </Tabs>
